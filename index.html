@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Mini LingQ Pro - Áudio Nativo (APK)</title>
+  <style>
+    :root {
+      --bg: #f4f6fb; --surface: #ffffff; --surface-2: #eef2f7; --text: #1d2433;
+      --muted: #657089; --border: #d8e0ec; --primary: #2563eb; --primary-dark: #1d4ed8;
+      --new: #facc15; --new-soft: rgba(250, 204, 21, 0.25); --mid-light: rgba(220, 38, 38, 0.15);
+      --mid-dark: rgba(220, 38, 38, 0.4); --danger: #dc2626; --shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; font-family: Inter, system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+    .container { max-width: 1600px; margin: 0 auto; padding: 20px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+    h1 { margin-bottom: 6px; font-size: 1.5rem; }
+    .subtitle { color: var(--muted); max-width: 780px; font-size: 0.95rem; }
+    .layout { display: grid; grid-template-columns: 320px 1fr 300px; gap: 20px; align-items: start; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; }
+    
+    details > summary { list-style: none; cursor: pointer; outline: none; }
+    details > summary::-webkit-details-marker { display: none; }
+    .summary-header { display: flex; justify-content: space-between; align-items: center; }
+    .summary-icon { color: var(--primary); font-size: 1.4rem; font-weight: bold; transition: transform 0.2s; }
+    details[open] .summary-icon { transform: rotate(45deg); }
+    details > div { margin-top: 16px; }
+
+    .stack { display: grid; gap: 16px; }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .row-between { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    label { display: block; font-size: 0.92rem; margin-bottom: 6px; color: var(--muted); font-weight: 600; }
+    
+    input, select, textarea { width: 100%; border: 1px solid var(--border); background: #fff; border-radius: 10px; padding: 14px 12px; font: inherit; color: var(--text); min-height: 48px; }
+    textarea { min-height: 170px; resize: vertical; }
+    button, .file-btn { border: 0; background: var(--primary); color: #fff; border-radius: 10px; padding: 12px 16px; font: inherit; font-weight: 600; cursor: pointer; transition: .2s ease; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; }
+    button:hover, .file-btn:hover { background: var(--primary-dark); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.secondary { background: #e8eefc; color: #1e3a8a; }
+    button.secondary:hover { background: #dbe7ff; }
+    button.ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    button.danger { background: var(--danger); }
+    button.small { padding: 8px 12px; font-size: 0.9rem; min-height: 38px; }
+    
+    .muted { color: var(--muted); }
+    .tiny { font-size: 0.85rem; }
+    .library-list { display: grid; gap: 10px; max-height: 420px; overflow: auto; padding-right: 4px; }
+    .text-item { border: 1px solid var(--border); background: #fff; border-radius: 12px; padding: 12px; display: grid; gap: 10px; }
+    .text-item.active { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+    .text-title { font-weight: 700; font-size: 1.05rem; }
+    
+    .progress-wrap { background: var(--surface-2); border-radius: 999px; overflow: hidden; height: 12px; display: flex; }
+    .progress-seg { height: 100%; }
+    .seg-new { background: var(--new); }
+    .seg-mid { background: var(--mid-dark); }
+    .seg-known { background: #22c55e; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { padding: 6px 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); }
+    
+    .reader-area { min-height: 340px; line-height: 2.4; font-size: 1.15rem; background: #fff; border: 1px solid var(--border); border-radius: 14px 14px 0 0; padding: 18px; white-space: pre-wrap; border-bottom: none; }
+    .pagination-bar { background: var(--surface-2); padding: 12px 18px; border: 1px solid var(--border); border-radius: 0 0 14px 14px; display: flex; justify-content: space-between; align-items: center; }
+    
+    .palavra { cursor: pointer; padding: 4px 6px; border-radius: 8px; transition: background .15s; display: inline-block; margin: 0 1px; }
+    .palavra:hover { background: #dbeafe; }
+    .palavra.selected { box-shadow: 0 0 0 2px rgba(37,99,235,0.22); }
+    .status-0 { background: var(--new-soft); }
+    .status-1-light { background: var(--mid-light); }
+    .status-1-dark { background: var(--mid-dark); }
+    .status-2 { background: transparent; }
+    
+    .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .stat { border: 1px solid var(--border); background: #fff; border-radius: 12px; padding: 12px; }
+    .stat strong { display: block; font-size: 1.35rem; margin-top: 4px; }
+    
+    .panel { position: sticky; top: 20px; transition: transform 0.3s cubic-bezier(0.1, 1, 0.5, 1); }
+    .translation { background: var(--surface-2); border-radius: 10px; padding: 12px; min-height: 90px; max-height: 200px; overflow: auto; }
+    .status-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+    .status-buttons button { flex: 1; }
+    .status-buttons button[data-status="0"] { background: #f59e0b; }
+    .status-buttons button[data-status="1-light"] { background: #ef4444; color: white; }
+    .status-buttons button[data-status="1-dark"] { background: #b91c1c; color: white; }
+    .status-buttons button[data-status="2"] { background: #16a34a; }
+    
+    .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+    .tab-btn { flex: 1; text-align: center; }
+    .tab-btn.active { background: var(--primary); color: white; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    
+    .table-wrap { overflow: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+    th, td { border-bottom: 1px solid var(--border); padding: 12px 8px; text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-size: 0.85rem; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 0.82rem; font-weight: 700; }
+    .badge-0 { background: var(--new-soft); color: #9a6700; }
+    .badge-1-light { background: var(--mid-light); color: #991b1b; }
+    .badge-1-dark { background: var(--mid-dark); color: #7f1d1d; }
+    .badge-2 { background: #e0f2fe; color: #0c4a6e; }
+    .empty { padding: 22px; border: 1px dashed var(--border); border-radius: 12px; color: var(--muted); text-align: center; background: #fff; }
+    .hidden { display: none !important; }
+    input[type="file"] { display: none; }
+    .audio-btn { background: #e8eefc; color: #1e3a8a; border: none; border-radius: 20px; padding: 8px 12px; font-size: 0.9rem; cursor: pointer; }
+    .audio-btn:hover { background: #dbe7ff; }
+    
+    .sheet-handle { display: none; width: 40px; height: 5px; background: var(--border); border-radius: 10px; margin: 0 auto 16px auto; }
+
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; padding-bottom: 100px; }
+      .panel { position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000; background: var(--surface); padding: 16px 20px 24px; border-radius: 24px 24px 0 0; box-shadow: 0 -10px 40px rgba(0,0,0,0.15); transform: translateY(120%); max-height: 85vh; overflow-y: auto; }
+      .panel.open { transform: translateY(0); }
+      .sheet-handle { display: block; }
+      .panel .card { border: none; box-shadow: none; padding: 0; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+      table, thead, tbody, th, td, tr { display: block; }
+      thead tr { position: absolute; top: -9999px; left: -9999px; }
+      tr { border: 1px solid var(--border); border-radius: 12px; margin-bottom: 12px; padding: 12px; background: #fff; display: flex; flex-direction: column; gap: 8px; }
+      td { border: none; position: relative; padding: 4px 0 4px 40%; text-align: left; }
+      td::before { content: attr(data-label); position: absolute; left: 0; width: 35%; padding-right: 10px; white-space: nowrap; font-weight: 600; color: var(--muted); font-size: 0.85rem; }
+      .audio-btn { align-self: flex-start; }
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <!-- Plugin Capacitor (opcional, será usado se disponível) -->
+  <script>
+    // Detecta se o Capacitor está presente e se o plugin TextToSpeech foi registrado
+    window.CapacitorTTS = null;
+    window.addEventListener('DOMContentLoaded', async () => {
+      if (window.Capacitor && window.Capacitor.isNative) {
+        try {
+          const { TextToSpeech } = await import('@capacitor-community/text-to-speech');
+          window.CapacitorTTS = TextToSpeech;
+          console.log('✅ Plugin TTS nativo carregado');
+        } catch (e) {
+          console.warn('Plugin TTS nativo não encontrado, usando fallback web');
+        }
+      }
+    });
+  </script>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div><h1>📚 Mini LingQ Pro</h1><p class="subtitle">Áudio nativo em APK (Capacitor) + Tradução MyMemory</p></div>
+    <div class="row"><button class="secondary" id="btnExportAll">Backup</button><label class="file-btn" for="inputImportJson">Importar</label><input type="file" id="inputImportJson" accept="application/json,.json" /></div>
+  </div>
+
+  <div class="layout">
+    <aside class="stack">
+      <section class="card">
+        <details id="detailsNovoTexto">
+          <summary><div class="summary-header"><h2 style="margin:0;">Novo texto</h2><span class="summary-icon">+</span></div></summary>
+          <div><div class="stack">
+            <div><label>Título</label><input id="tituloTexto" type="text" placeholder="Título do livro / artigo" /></div>
+            <div><label>Idioma</label><select id="seletorIdioma">
+              <option value="en-US">Inglês (EUA)</option><option value="ru-RU">Russo</option><option value="es-ES">Espanhol</option>
+              <option value="fr-FR">Francês</option><option value="it-IT">Italiano</option><option value="de-DE">Alemão</option>
+            </select></div>
+            <div><label>Conteúdo</label><textarea id="inputTexto" placeholder="Cole o texto ou importe EPUB..."></textarea></div>
+            <div class="row"><button id="btnSalvarTexto" style="flex:1;">Salvar</button><button id="btnNovoFormulario" class="ghost small">Limpar</button><label class="file-btn secondary" for="inputEpubFile" style="flex:1;">📖 Importar EPUB</label><input type="file" id="inputEpubFile" accept=".epub" /></div>
+          </div></div>
+        </details>
+      </section>
+
+      <section class="card">
+        <div class="row-between" style="margin-bottom:12px;"><h2>Biblioteca</h2><span class="tiny muted" id="libraryCount">0 textos</span></div>
+        <div id="libraryList" class="library-list"></div>
+      </section>
+    </aside>
+
+    <main class="stack">
+      <section class="card" id="currentTextCard">
+        <div id="currentTextEmpty" class="empty">Nenhum texto selecionado.</div>
+        <div id="currentTextContent" class="hidden stack">
+          <div class="row-between">
+            <div><h2 id="currentTitle" style="margin:0;">-</h2><div class="tiny muted" id="currentMeta">-</div></div>
+            <div class="row"><button id="btnExportCurrent" class="secondary small">Exportar</button><button id="btnDeleteCurrent" class="danger small">Excluir</button></div>
+          </div>
+          <div class="progress-wrap"><div class="progress-seg seg-new" id="segNew" style="width:0%"></div><div class="progress-seg seg-mid" id="segMid" style="width:0%"></div><div class="progress-seg seg-known" id="segKnown" style="width:0%"></div></div>
+          <div class="chips" id="progressChips"></div>
+          <div class="stats-grid">
+            <div class="stat"><span class="tiny muted">Progresso</span><strong id="statProgress">0%</strong></div>
+            <div class="stat"><span class="tiny muted">Palavras únicas</span><strong id="statUnique">0</strong></div>
+            <div class="stat"><span class="tiny muted">Ocorrências</span><strong id="statTokens">0</strong></div>
+            <div class="stat"><span class="tiny muted">Última leitura</span><strong id="statUpdated" style="font-size:1rem;">-</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" style="padding:0; border:none; box-shadow:none; background:transparent;">
+        <div class="tabs" style="margin-bottom:14px;">
+          <button class="tab-btn active ghost" data-tab="reader">Leitor</button>
+          <button class="tab-btn ghost" data-tab="vocab">Vocabulário</button>
+          <button class="tab-btn ghost" data-tab="global">🌍 Global</button>
+        </div>
+        
+        <div class="tab-panel active" data-panel="reader">
+          <div class="reader-area" id="readerArea">Selecione um texto.</div>
+          <div class="pagination-bar hidden" id="paginationWrap">
+            <button id="btnPrevPage" class="secondary small">⬅️ Anterior</button>
+            <span class="muted font-weight-bold" id="pageInfo">Página 1</span>
+            <button id="btnNextPage" class="secondary small">Próxima ➡️</button>
+          </div>
+        </div>
+        
+        <div class="tab-panel card" data-panel="vocab">
+          <div class="stack">
+            <div class="row">
+              <div style="flex:1;"><label>Filtrar</label><select id="filterStatus"><option value="all">Todos</option><option value="0">Novas</option><option value="1-light">Inter. claro</option><option value="1-dark">Inter. escuro</option><option value="2">Conhecidas</option><option value="untranslated">Sem tradução</option></select></div>
+              <div style="flex:1;"><label>Ordenar</label><select id="sortVocab"><option value="alpha">A-Z</option><option value="freq-desc">Frequentes</option><option value="recent-desc">Recentes</option><option value="status">Status</option></select></div>
+            </div>
+            <div class="table-wrap"><table>
+              <thead><tr><th>Palavra</th><th>Status</th><th>Tradução</th><th>Ocorrências</th><th>Última</th><th>Ouvir</th></tr></thead>
+              <tbody id="vocabTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tab-panel card" data-panel="global">
+          <div class="stack">
+            <div class="row">
+              <div style="flex:1;"><label>Filtrar</label><select id="filterGlobalStatus"><option value="all">Todos</option><option value="0">Novas</option><option value="1-light">Inter. claro</option><option value="1-dark">Inter. escuro</option><option value="2">Conhecidas</option><option value="untranslated">Sem tradução</option></select></div>
+              <div style="flex:1;"><label>Ordenar</label><select id="sortGlobal"><option value="alpha">A-Z</option><option value="freq-desc">Frequentes</option><option value="recent-desc">Recentes</option><option value="status">Status</option></select></div>
+            </div>
+            <div class="table-wrap"><table>
+              <thead><tr><th>Palavra</th><th>Status</th><th>Tradução</th><th>Total</th><th>Última</th><th>Ouvir</th></tr></thead>
+              <tbody id="globalVocabTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <aside class="stack panel" id="mobilePanel">
+      <div class="sheet-handle" id="btnFecharPainel"></div>
+      <section class="card">
+        <div class="row-between"><h3 style="margin:0;">Painel</h3><button id="btnFecharPainelBtn" class="ghost small" style="display:none;">Fechar</button></div>
+        <div id="wordEmpty" class="empty" style="margin-top:12px;">Clique em uma palavra.</div>
+        <div id="wordPanel" class="hidden stack" style="margin-top:12px;">
+          <div><div class="tiny muted">Palavra</div><h2 id="selectedWord" style="margin:0;">-</h2></div>
+          <button id="btnSpeakWord">Ouvir 🔊</button>
+          <div><label>Tradução</label><div class="translation" id="translationResult"></div><button id="btnEditTranslation" class="secondary small" style="margin-top:8px; width:100%;">✏️ Editar manualmente</button></div>
+          <div><label>Status</label><div class="status-buttons"><button data-status="0">Nova</button><button data-status="1-light">Int (cla)</button><button data-status="1-dark">Int (esc)</button><button data-status="2">Conhecida</button></div></div>
+          <div class="row-between tiny"><span id="selectedOccurrences">Ocorrências: -</span><span id="selectedCurrentStatus">Status: -</span></div>
+        </div>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script>
+  // ---------- INDEXEDDB LAYER ----------
+  const DB_NAME = 'MiniLingQDB'; const DB_VERSION = 2; let db = null;
+  async function openDB() { return new Promise((resolve, reject) => { const request = indexedDB.open(DB_NAME, DB_VERSION); request.onupgradeneeded = (e) => { const db_ = e.target.result; if (!db_.objectStoreNames.contains('state')) db_.createObjectStore('state', { keyPath: 'id' }); }; request.onsuccess = (e) => { db = e.target.result; resolve(db); }; request.onerror = (e) => reject(e.target.error); }); }
+  async function loadStateFromDB() { if (!db) await openDB(); return new Promise((resolve) => { const tx = db.transaction('state', 'readonly'); const store = tx.objectStore('state'); const getReq = store.get('main'); getReq.onsuccess = () => resolve(getReq.result ? getReq.result.data : null); getReq.onerror = () => resolve(null); }); }
+  async function saveStateToDB(data) { if (!db) await openDB(); const tx = db.transaction('state', 'readwrite'); const store = tx.objectStore('state'); store.put({ id: 'main', data: data }); return new Promise((resolve) => { tx.oncomplete = resolve; }); }
+
+  // ---------- GLOBAL STATE ----------
+  let state = { versao: 4, textos: {}, vocabularioGlobal: {}, ui: { textoAtualId: null, paginaAtual: 0 } };
+  const TOKENS_POR_PAGINA = 600;
+
+  function migrarParaInterLevel(stateObj) {
+    let modificado = false;
+    for (const termo in stateObj.vocabularioGlobal) { const item = stateObj.vocabularioGlobal[termo]; if (item.status === 1 && item.interLevel === undefined) { item.interLevel = 0; modificado = true; } if (item.status === 2 && item.interLevel !== undefined) delete item.interLevel; }
+    for (const id in stateObj.textos) { const texto = stateObj.textos[id]; if (texto.vocab) { for (const termo in texto.vocab) { const word = texto.vocab[termo]; if (word.status === 1 && word.interLevel === undefined) { word.interLevel = 0; modificado = true; } if (word.status === 2 && word.interLevel !== undefined) delete word.interLevel; } } }
+    if (modificado) saveStateToDB(stateObj); return stateObj;
+  }
+
+  async function initDBAndLoad() {
+    await openDB(); let saved = await loadStateFromDB();
+    if (saved) { state = saved; migrarParaInterLevel(state); if(state.ui.paginaAtual === undefined) state.ui.paginaAtual = 0; } 
+    else { state = { versao: 4, textos: {}, vocabularioGlobal: {}, ui: { textoAtualId: null, paginaAtual: 0 } }; await saveStateToDB(state); }
+    renderAll();
+  }
+
+  function saveDB() { if (db) saveStateToDB(state); }
+
+  function uid() { return 'txt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8); }
+  function nowISO() { return new Date().toISOString(); }
+  function formatDate(iso) { return iso ? new Date(iso).toLocaleString('pt-BR') : '-'; }
+  function getCurrentText() { const id = state.ui.textoAtualId; return id ? state.textos[id] || null : null; }
+  function normalizeWord(word) { return word.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/^[^\p{L}\p{N}']+|[^\p{L}\p{N}']+$/gu, '').trim(); }
+  function isWordToken(t) { return /[\p{L}\p{N}]/u.test(t); }
+  function tokenize(text) { return text.match(/[\p{L}\p{N}']+|[^\p{L}\p{N}']+/gu) || []; }
+
+  function buildVocabAndSync(text) {
+    const tokens = tokenize(text); const localVocab = {}; let totalTokens = 0;
+    for (const token of tokens) {
+      if (!isWordToken(token)) continue;
+      const termo = normalizeWord(token); if (!termo) continue;
+      totalTokens++; if (!localVocab[termo]) localVocab[termo] = { termo, ocorrencias: 0 }; localVocab[termo].ocorrencias++;
+    }
+    for (const termo in localVocab) {
+      if (!state.vocabularioGlobal[termo]) { state.vocabularioGlobal[termo] = { status: 0, traducoes: [], ultimaInteracao: null }; }
+      const g = state.vocabularioGlobal[termo]; localVocab[termo].status = g.status; localVocab[termo].traducoes = [...g.traducoes]; localVocab[termo].ultimaInteracao = g.ultimaInteracao; if (g.status === 1) localVocab[termo].interLevel = g.interLevel ?? 0;
+    }
+    return { vocab: localVocab, totalTokens };
+  }
+
+  function computeStats(texto) {
+    const list = Object.values(texto.vocab || {}); const totalUnicas = list.length; let novas=0,intermediarias=0,conhecidas=0;
+    list.forEach(i => { if(i.status === 2) conhecidas++; else if(i.status === 1) intermediarias++; else novas++; });
+    const progresso = totalUnicas ? ((conhecidas + intermediarias*0.5)/totalUnicas)*100 : 0;
+    texto.stats = { totalTokens: texto.stats?.totalTokens || 0, totalUnicas, novas, intermediarias, conhecidas, progresso: Number(progresso.toFixed(1)) }; return texto.stats;
+  }
+
+  function syncTextWithGlobal(texto) {
+    if(!texto.vocab) return;
+    for(const termo in texto.vocab) {
+      const g = state.vocabularioGlobal[termo];
+      if(g) { texto.vocab[termo].status = g.status; texto.vocab[termo].traducoes = [...g.traducoes]; texto.vocab[termo].ultimaInteracao = g.ultimaInteracao; if(g.status === 1) texto.vocab[termo].interLevel = g.interLevel ?? 0; else delete texto.vocab[termo].interLevel; } 
+      else { state.vocabularioGlobal[termo] = { status: texto.vocab[termo].status ?? 0, traducoes: texto.vocab[termo].traducoes || [], ultimaInteracao: texto.vocab[termo].ultimaInteracao || null, interLevel: (texto.vocab[termo].status === 1) ? (texto.vocab[termo].interLevel ?? 0) : undefined }; }
+    }
+    computeStats(texto);
+  }
+
+  function atualizarStatusGlobal(termo, novoStatus, interLevel = null) {
+    if (!state.vocabularioGlobal[termo]) { state.vocabularioGlobal[termo] = { status: novoStatus, traducoes: [], ultimaInteracao: nowISO() }; } else { state.vocabularioGlobal[termo].status = novoStatus; state.vocabularioGlobal[termo].ultimaInteracao = nowISO(); }
+    if (novoStatus === 1 && interLevel !== null) { state.vocabularioGlobal[termo].interLevel = interLevel; } else if (novoStatus !== 1) { delete state.vocabularioGlobal[termo].interLevel; }
+    for(const id in state.textos) { const t = state.textos[id]; if(t.vocab && t.vocab[termo]) { t.vocab[termo].status = novoStatus; t.vocab[termo].ultimaInteracao = state.vocabularioGlobal[termo].ultimaInteracao; if (novoStatus === 1 && interLevel !== null) t.vocab[termo].interLevel = interLevel; else if (novoStatus !== 1) delete t.vocab[termo].interLevel; computeStats(t); } }
+  }
+
+  async function extractTextFromEpub(file) {
+    const zip = await JSZip.loadAsync(file); let textParts = [];
+    const htmlFiles = Object.keys(zip.files).filter(name => /\.(xhtml|html|htm)$/i.test(name) && !name.includes('/toc.') && !name.includes('/nav.'));
+    for (let filename of htmlFiles) { const content = await zip.files[filename].async('string'); const doc = new DOMParser().parseFromString(content, 'text/html'); if(doc.body) textParts.push(doc.body.innerText || doc.body.textContent || ''); }
+    if(textParts.length === 0) throw new Error('Sem texto.'); return textParts.join('\n\n').replace(/\s+/g, ' ').trim();
+  }
+
+  // --------------------------------------------------------------
+  // FUNÇÃO DE ÁUDIO COM PLUGIN NATIVO (CAPACITOR) + FALLBACKS
+  // --------------------------------------------------------------
+  async function falarPalavra() {
+    const texto = getCurrentText();
+    if (!texto || !palavraAtual) return;
+    const palavra = palavraAtual.original;
+    const lang = texto.idioma; // ex: "en-US"
+
+    // 1. Tentar usar plugin nativo do Capacitor (se disponível)
+    if (window.CapacitorTTS) {
+      try {
+        await window.CapacitorTTS.speak({
+          text: palavra,
+          lang: lang,
+          rate: 0.9
+        });
+        console.log('Áudio nativo (Capacitor)');
+        return;
+      } catch (err) {
+        console.warn('Falha no plugin nativo:', err);
+      }
+    }
+
+    // 2. Fallback para Web Speech API
+    if (window.speechSynthesis) {
+      // Cancela qualquer fala anterior para não empilhar
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(palavra);
+      utterance.lang = lang;
+      utterance.rate = 0.9;
+      
+      // Aguarda vozes carregarem (útil em alguns navegadores)
+      const speakWithVoice = () => {
+        const voices = window.speechSynthesis.getVoices();
+        const voice = voices.find(v => v.lang.startsWith(lang.split('-')[0])) || voices[0];
+        if (voice) utterance.voice = voice;
+        window.speechSynthesis.speak(utterance);
+      };
+      if (window.speechSynthesis.getVoices().length) {
+        speakWithVoice();
+      } else {
+        window.speechSynthesis.onvoiceschanged = speakWithVoice;
+      }
+      return;
+    }
+
+    // 3. Último recurso: Google Translate TTS (não oficial, pode ser bloqueado)
+    try {
+      const langCode = lang.split('-')[0];
+      const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(palavra)}&tl=${langCode}&client=tw-ob`;
+      const audio = new Audio(url);
+      audio.play().catch(e => console.warn('Google TTS falhou:', e));
+    } catch (e) {
+      console.error('Nenhum método de áudio funcionou', e);
+      alert('Não foi possível reproduzir o áudio. Verifique se o TTS está disponível.');
+    }
+  }
+
+  // --------------------------------------------------------------
+  // TRADUÇÃO (MyMemory)
+  // --------------------------------------------------------------
+  async function buscarTraducao(palavraExibida, termo, idiomaCompleto) {
+    const texto = getCurrentText(); if (!texto || !palavraAtual || palavraAtual.termo !== termo) return;
+    const langSigla = idiomaCompleto.split('-')[0];
+    els.translationResult.innerHTML = '🌐 Buscando...';
+    let traducao = null; let erro = false;
+    try {
+      const resp = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(palavraExibida)}&langpair=${langSigla}|pt-BR`);
+      if (resp.ok) {
+        const dados = await resp.json();
+        let raw = dados?.responseData?.translatedText;
+        if (raw && raw.toLowerCase() !== palavraExibida.toLowerCase()) traducao = raw;
+      }
+    } catch (e) { erro = true; }
+    if (!traducao && langSigla === 'en') {
+      try {
+        const resp = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(termo)}`);
+        if (resp.ok) {
+          const dados = await resp.json();
+          const def = dados?.[0]?.meanings?.[0]?.definitions?.[0]?.definition;
+          if (def) traducao = `${dados[0].meanings[0].partOfSpeech || 'def'}: ${def}`;
+        }
+      } catch(e) {}
+    }
+    if (!traducao) { traducao = '⚠️ Sem tradução automática.'; erro = true; }
+    if (traducao && !erro) salvarTraducaoGlobal(termo, traducao);
+    else if (erro && palavraAtual?.termo === termo) els.translationResult.innerHTML = traducao;
+  }
+
+  function salvarTraducaoGlobal(termo, valor) {
+    if (!state.vocabularioGlobal[termo]) { state.vocabularioGlobal[termo] = { status: 0, traducoes: [], ultimaInteracao: null }; }
+    const g = state.vocabularioGlobal[termo]; if (!g.traducoes.includes(valor)) g.traducoes.push(valor); g.ultimaInteracao = nowISO();
+    for (const id in state.textos) { if (state.textos[id].vocab?.[termo]) { state.textos[id].vocab[termo].traducoes = [...g.traducoes]; state.textos[id].vocab[termo].ultimaInteracao = g.ultimaInteracao; } }
+    saveDB(); if (palavraAtual?.termo === termo) els.translationResult.innerHTML = valor; renderCurrentText(); renderVocabTable(); renderVocabGlobal(); renderWordPanel();
+  }
+
+  function editarTraducaoManual() {
+    if (!palavraAtual) return; const termo = palavraAtual.termo; const traducoesAtuais = state.vocabularioGlobal[termo]?.traducoes || [];
+    const novaTraducao = prompt('Tradução de "' + palavraAtual.original + '":', traducoesAtuais[0] || '');
+    if (novaTraducao && novaTraducao.trim()) salvarTraducaoGlobal(termo, novaTraducao.trim());
+  }
+
+  // --------------------------------------------------------------
+  // ELEMENTOS E RENDERIZAÇÃO (mantido igual ao original)
+  // --------------------------------------------------------------
+  const els = {
+    tituloTexto: document.getElementById('tituloTexto'), seletorIdioma: document.getElementById('seletorIdioma'), inputTexto: document.getElementById('inputTexto'),
+    btnSalvarTexto: document.getElementById('btnSalvarTexto'), btnNovoFormulario: document.getElementById('btnNovoFormulario'),
+    libraryList: document.getElementById('libraryList'), libraryCount: document.getElementById('libraryCount'),
+    currentTextEmpty: document.getElementById('currentTextEmpty'), currentTextContent: document.getElementById('currentTextContent'),
+    currentTitle: document.getElementById('currentTitle'), currentMeta: document.getElementById('currentMeta'), progressChips: document.getElementById('progressChips'),
+    statProgress: document.getElementById('statProgress'), statUnique: document.getElementById('statUnique'), statTokens: document.getElementById('statTokens'), statUpdated: document.getElementById('statUpdated'),
+    segNew: document.getElementById('segNew'), segMid: document.getElementById('segMid'), segKnown: document.getElementById('segKnown'),
+    readerArea: document.getElementById('readerArea'), paginationWrap: document.getElementById('paginationWrap'), btnPrevPage: document.getElementById('btnPrevPage'), btnNextPage: document.getElementById('btnNextPage'), pageInfo: document.getElementById('pageInfo'),
+    vocabTableBody: document.getElementById('vocabTableBody'), filterStatus: document.getElementById('filterStatus'), sortVocab: document.getElementById('sortVocab'),
+    selectedWord: document.getElementById('selectedWord'), translationResult: document.getElementById('translationResult'), selectedOccurrences: document.getElementById('selectedOccurrences'), selectedCurrentStatus: document.getElementById('selectedCurrentStatus'),
+    btnSpeakWord: document.getElementById('btnSpeakWord'), btnExportAll: document.getElementById('btnExportAll'), inputImportJson: document.getElementById('inputImportJson'), btnExportCurrent: document.getElementById('btnExportCurrent'),
+    btnDeleteCurrent: document.getElementById('btnDeleteCurrent'), wordEmpty: document.getElementById('wordEmpty'), wordPanel: document.getElementById('wordPanel'),
+    filterGlobalStatus: document.getElementById('filterGlobalStatus'), sortGlobal: document.getElementById('sortGlobal'), globalVocabTableBody: document.getElementById('globalVocabTableBody'),
+    inputEpubFile: document.getElementById('inputEpubFile'), btnEditTranslation: document.getElementById('btnEditTranslation'), mobilePanel: document.getElementById('mobilePanel'), btnFecharPainel: document.getElementById('btnFecharPainel'), btnFecharPainelBtn: document.getElementById('btnFecharPainelBtn'), detailsNovoTexto: document.getElementById('detailsNovoTexto')
+  };
+
+  let palavraAtual = null, elementoAtual = null;
+
+  function fecharPainelMobile() { els.mobilePanel.classList.remove('open'); }
+  els.btnFecharPainel.addEventListener('click', fecharPainelMobile); els.btnFecharPainelBtn.addEventListener('click', fecharPainelMobile);
+
+  function getStatusClass(wordItem) { if (wordItem.status === 0) return 'status-0'; if (wordItem.status === 2) return 'status-2'; if (wordItem.status === 1) return wordItem.interLevel === 1 ? 'status-1-dark' : 'status-1-light'; return ''; }
+
+  function renderReader() {
+    const texto = getCurrentText(); palavraAtual = null; elementoAtual = null;
+    if(!texto) { els.readerArea.innerHTML = 'Selecione um texto.'; els.paginationWrap.classList.add('hidden'); return; }
+    
+    const tokens = tokenize(texto.conteudo);
+    const totalPaginas = Math.ceil(tokens.length / TOKENS_POR_PAGINA);
+    let pag = state.ui.paginaAtual || 0;
+    if (pag >= totalPaginas) pag = Math.max(0, totalPaginas - 1);
+    state.ui.paginaAtual = pag;
+    
+    const inicio = pag * TOKENS_POR_PAGINA;
+    const tokensPagina = tokens.slice(inicio, inicio + TOKENS_POR_PAGINA);
+    
+    els.readerArea.innerHTML = '';
+    tokensPagina.forEach(token => {
+      if(isWordToken(token)) {
+        const termo = normalizeWord(token); const wordData = texto.vocab[termo] || { status: 0 };
+        const span = document.createElement('span'); span.className = `palavra ${getStatusClass(wordData)}`; span.textContent = token;
+        span.addEventListener('click', () => { abrirPainelPalavra(token, termo, span); falarPalavra(); }); // ao clicar, já toca áudio
+        span.addEventListener('dblclick', () => { abrirPainelPalavra(token, termo, span); mudarStatus(2, null); });
+        els.readerArea.appendChild(span);
+      } else els.readerArea.appendChild(document.createTextNode(token));
+    });
+
+    if(totalPaginas > 1) {
+      els.paginationWrap.classList.remove('hidden'); els.pageInfo.textContent = `Página ${pag + 1} de ${totalPaginas}`;
+      els.btnPrevPage.disabled = pag === 0; els.btnNextPage.disabled = pag >= totalPaginas - 1;
+    } else { els.paginationWrap.classList.add('hidden'); }
+  }
+
+  els.btnPrevPage.addEventListener('click', () => { if(state.ui.paginaAtual > 0) { state.ui.paginaAtual--; saveDB(); renderReader(); window.scrollTo({top:0}); } });
+  els.btnNextPage.addEventListener('click', () => { const max = Math.ceil(tokenize(getCurrentText().conteudo).length / TOKENS_POR_PAGINA) - 1; if(state.ui.paginaAtual < max) { state.ui.paginaAtual++; saveDB(); renderReader(); window.scrollTo({top:0}); } });
+
+  function renderLibrary() {
+    const textos = Object.values(state.textos).sort((a,b)=>new Date(b.atualizadoEm)-new Date(a.atualizadoEm));
+    els.libraryCount.textContent = `${textos.length} texto(s)`;
+    if(!textos.length) { els.libraryList.innerHTML = '<div class="empty">Biblioteca vazia.</div>'; return; }
+    els.libraryList.innerHTML = textos.map(texto => {
+      computeStats(texto); const active = texto.id === state.ui.textoAtualId ? 'active' : ''; const total = texto.stats.totalUnicas || 1;
+      return `<div class="text-item ${active}"><div><div class="text-title">${escapeHtml(texto.titulo)}</div><div class="tiny muted">${escapeHtml(idiomaNome(texto.idioma))} · ${escapeHtml(formatDate(texto.atualizadoEm))}</div></div>
+      <div class="progress-wrap"><div class="progress-seg seg-new" style="width:${(texto.stats.novas/total)*100}%"></div><div class="progress-seg seg-mid" style="width:${(texto.stats.intermediarias/total)*100}%"></div><div class="progress-seg seg-known" style="width:${(texto.stats.conhecidas/total)*100}%"></div></div>
+      <div class="row-between tiny"><span>${texto.stats.progresso}%</span><span>${texto.stats.totalUnicas} únicas</span></div>
+      <div class="row"><button class="small" onclick="abrirTexto('${texto.id}')">Abrir</button><button class="small ghost" onclick="preencherFormularioEdicao('${texto.id}')">Editar</button></div></div>`;
+    }).join('');
+  }
+
+  function renderCurrentText() {
+    const texto = getCurrentText(); if(!texto) { els.currentTextEmpty.classList.remove('hidden'); els.currentTextContent.classList.add('hidden'); return; }
+    computeStats(texto); els.currentTextEmpty.classList.add('hidden'); els.currentTextContent.classList.remove('hidden');
+    els.currentTitle.textContent = texto.titulo; els.currentMeta.textContent = `${idiomaNome(texto.idioma)}`;
+    els.statProgress.textContent = `${texto.stats.progresso}%`; els.statUnique.textContent = texto.stats.totalUnicas; els.statTokens.textContent = texto.stats.totalTokens; els.statUpdated.textContent = formatDate(texto.atualizadoEm);
+    const total = texto.stats.totalUnicas||1; els.segNew.style.width = `${(texto.stats.novas/total)*100}%`; els.segMid.style.width = `${(texto.stats.intermediarias/total)*100}%`; els.segKnown.style.width = `${(texto.stats.conhecidas/total)*100}%`;
+    els.progressChips.innerHTML = `<span class="chip">Novas: ${texto.stats.novas}</span><span class="chip">Inter: ${texto.stats.intermediarias}</span><span class="chip">Conhecidas: ${texto.stats.conhecidas}</span>`;
+  }
+
+  function renderWordPanel() {
+    const texto = getCurrentText(); if(!texto || !palavraAtual) { els.wordEmpty.classList.remove('hidden'); els.wordPanel.classList.add('hidden'); return; }
+    els.wordEmpty.classList.add('hidden'); els.wordPanel.classList.remove('hidden');
+    const item = texto.vocab[palavraAtual.termo] || state.vocabularioGlobal[palavraAtual.termo];
+    if(item) {
+      let statusText = statusLabel(item.status); if (item.status === 1) statusText += item.interLevel === 1 ? ' (escuro)' : ' (claro)';
+      els.selectedCurrentStatus.textContent = `Status: ${statusText}`; els.selectedOccurrences.textContent = `Ocorrências: ${item.ocorrencias??'?'}`;
+      if(item.traducoes?.length) els.translationResult.innerHTML = escapeHtml(item.traducoes.join(' · ')); else els.translationResult.innerHTML = 'Sem tradução.';
+    }
+  }
+
+  async function abrirPainelPalavra(original, termo, elemento) {
+    const texto = getCurrentText(); if(!texto) return;
+    document.querySelectorAll('.palavra.selected').forEach(el=>el.classList.remove('selected'));
+    elemento.classList.add('selected'); elementoAtual = elemento; palavraAtual = { original, termo }; els.selectedWord.textContent = original;
+    const item = texto.vocab[termo] || state.vocabularioGlobal[termo];
+    if(item?.traducoes?.length) { els.translationResult.innerHTML = escapeHtml(item.traducoes.join(' · ')); } else { els.translationResult.innerHTML = 'Buscando...'; buscarTraducao(original, termo, texto.idioma); }
+    if(item) { let statusText = statusLabel(item.status); if (item.status === 1) statusText += item.interLevel === 1 ? ' (esc)' : ' (cla)'; els.selectedCurrentStatus.textContent = `Status: ${statusText}`; els.selectedOccurrences.textContent = `Oc: ${item.ocorrencias??'?'}`; } else { els.selectedOccurrences.textContent = 'Oc: 0'; els.selectedCurrentStatus.textContent = 'Status: Nova'; }
+    renderWordPanel(); bindStatusButtons(); els.mobilePanel.classList.add('open'); if(window.innerWidth <= 980) els.btnFecharPainelBtn.style.display = 'block';
+  }
+
+  function mudarStatus(novoStatus, interLevel = null) {
+    const texto = getCurrentText(); if(!texto || !palavraAtual) return; const termo = palavraAtual.termo;
+    if (novoStatus === 1 && interLevel === null) interLevel = 0; atualizarStatusGlobal(termo, novoStatus, interLevel); saveDB(); renderReader();
+    if (palavraAtual?.termo === termo) { const item = state.vocabularioGlobal[termo]; let statusText = statusLabel(item.status); if (item.status === 1) statusText += item.interLevel === 1 ? ' (esc)' : ' (cla)'; els.selectedCurrentStatus.textContent = `Status: ${statusText}`; }
+    renderLibrary(); renderCurrentText(); renderVocabTable(); renderVocabGlobal(); renderWordPanel(); if(window.innerWidth <= 980) fecharPainelMobile();
+  }
+
+  function renderVocabTable() {
+    const texto = getCurrentText(); if(!texto) { els.vocabTableBody.innerHTML = '<tr><td colspan="6">Nenhum texto.</td></tr>'; return; }
+    let items = Object.values(texto.vocab); const filter = els.filterStatus.value, sort = els.sortVocab.value;
+    if (filter === 'untranslated') items = items.filter(i=>!i.traducoes?.length); else if (filter === '1-light') items = items.filter(i=> i.status === 1 && i.interLevel === 0); else if (filter === '1-dark') items = items.filter(i=> i.status === 1 && i.interLevel === 1); else if (filter !== 'all') items = items.filter(i=>String(i.status) === filter);
+    items.sort((a,b)=>{ if(sort==='freq-desc') return b.ocorrencias - a.ocorrencias; if(sort==='recent-desc') return new Date(b.ultimaInteracao||0)-new Date(a.ultimaInteracao||0); if(sort==='status') return a.status - b.status; return a.termo.localeCompare(b.termo); });
+    els.vocabTableBody.innerHTML = items.map(i=>{
+      let badgeClass = `badge-${i.status}`; if (i.status === 1) badgeClass += i.interLevel === 1 ? '-dark' : '-light'; let statusLabelText = statusLabel(i.status); if (i.status === 1) statusLabelText += i.interLevel === 1 ? ' esc' : ' cla';
+      return `<tr><td data-label="Palavra">${escapeHtml(i.termo)}</td><td data-label="Status"><span class="badge ${badgeClass}">${statusLabelText}</span></td><td data-label="Tradução">${escapeHtml(i.traducoes?.[0]||'-')}</td><td data-label="Oc">${i.ocorrencias}</td><td data-label="Última">${formatDate(i.ultimaInteracao)}</td><td data-label="Ouvir"><button class="audio-btn small" data-word="${escapeHtml(i.termo)}" data-original="${escapeHtml(i.termo)}">🔊</button></td></tr>`;
+    }).join(''); attachAudioButtonsToTable(els.vocabTableBody);
+  }
+
+  function renderVocabGlobal() {
+    const items = Object.entries(state.vocabularioGlobal).map(([termo,data])=>{ let totalOcorrencias = 0; for(const id in state.textos) if(state.textos[id].vocab?.[termo]) totalOcorrencias += state.textos[id].vocab[termo].ocorrencias; return { termo, status: data.status, interLevel: data.interLevel, traducoes: data.traducoes||[], ultimaInteracao: data.ultimaInteracao, totalOcorrencias }; });
+    const filter = els.filterGlobalStatus.value, sort = els.sortGlobal.value; let filtered = items;
+    if (filter === 'untranslated') filtered = items.filter(i=>!i.traducoes.length); else if (filter === '1-light') filtered = items.filter(i=> i.status === 1 && i.interLevel === 0); else if (filter === '1-dark') filtered = items.filter(i=> i.status === 1 && i.interLevel === 1); else if (filter !== 'all') filtered = items.filter(i=>String(i.status) === filter);
+    filtered.sort((a,b)=>{ if(sort==='freq-desc') return b.totalOcorrencias - a.totalOcorrencias; if(sort==='recent-desc') return new Date(b.ultimaInteracao||0)-new Date(a.ultimaInteracao||0); if(sort==='status') return a.status - b.status; return a.termo.localeCompare(b.termo); });
+    els.globalVocabTableBody.innerHTML = filtered.map(i=>{
+      let badgeClass = `badge-${i.status}`; if (i.status === 1) badgeClass += i.interLevel === 1 ? '-dark' : '-light'; let statusLabelText = statusLabel(i.status); if (i.status === 1) statusLabelText += i.interLevel === 1 ? ' esc' : ' cla';
+      return `<tr><td data-label="Palavra" class="global-word-click" data-termo="${escapeHtml(i.termo)}" data-original="${escapeHtml(i.termo)}" style="cursor:pointer;color:var(--primary);">${escapeHtml(i.termo)}</td><td data-label="Status"><span class="badge ${badgeClass}">${statusLabelText}</span></td><td data-label="Tradução">${escapeHtml(i.traducoes[0]||'-')}</td><td data-label="Total">${i.totalOcorrencias}</td><td data-label="Última">${formatDate(i.ultimaInteracao)}</td><td data-label="Ouvir"><button class="audio-btn small" data-word="${escapeHtml(i.termo)}" data-original="${escapeHtml(i.termo)}">🔊</button></td></tr>`;
+    }).join('');
+    document.querySelectorAll('#globalVocabTableBody .global-word-click').forEach(cell=>{ cell.removeEventListener('click', globalClick); cell.addEventListener('click', globalClick); }); attachAudioButtonsToTable(els.globalVocabTableBody);
+    function globalClick(e) { const termo = this.dataset.termo, original = this.dataset.original; if(termo) { const fakeSpan = document.createElement('span'); abrirPainelPalavra(original, termo, fakeSpan); } }
+  }
+
+  function attachAudioButtonsToTable(tableBody) { tableBody.querySelectorAll('.audio-btn').forEach(btn=>{ btn.removeEventListener('click', audioHandler); btn.addEventListener('click', audioHandler); }); function audioHandler(e) { e.stopPropagation(); const word = this.dataset.word, orig = this.dataset.original; if(word) { const fake = document.createElement('span'); abrirPainelPalavra(orig, word, fake); falarPalavra(); } } }
+  function bindStatusButtons() { document.querySelectorAll('.status-buttons button').forEach(btn=>{ btn.removeEventListener('click', statusHandler); btn.addEventListener('click', statusHandler); }); }
+  function statusHandler(e) { const statusStr = e.currentTarget.dataset.status; if (statusStr === '1-light') mudarStatus(1, 0); else if (statusStr === '1-dark') mudarStatus(1, 1); else mudarStatus(parseInt(statusStr), null); }
+  function setActiveTab(tab) { document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab)); document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active',p.dataset.panel===tab)); if(tab==='global') renderVocabGlobal(); }
+
+  function idiomaNome(code) { const map = {'en-US':'Inglês','ru-RU':'Russo','es-ES':'Espanhol','fr-FR':'Francês','it-IT':'Italiano','de-DE':'Alemão'}; return map[code]||code; }
+  function statusLabel(s) { return ['Nova','Inter','Conhecida'][s]||'Nova'; }
+  
+  function salvarOuAtualizarTexto() {
+    const titulo = els.tituloTexto.value.trim(), idioma = els.seletorIdioma.value, conteudo = els.inputTexto.value.trim(); if(!titulo || !conteudo) { alert('Preencha título e conteúdo.'); return; }
+    const current = getCurrentText();
+    if(current && current._editingSource === 'form') { current.titulo = titulo; current.idioma = idioma; current.conteudo = conteudo; current.atualizadoEm = nowISO(); const { vocab, totalTokens } = buildVocabAndSync(conteudo); current.vocab = vocab; current.stats.totalTokens = totalTokens; computeStats(current); delete current._editingSource; } 
+    else { const id = uid(); const { vocab, totalTokens } = buildVocabAndSync(conteudo); state.textos[id] = { id, titulo, idioma, criadoEm: nowISO(), atualizadoEm: nowISO(), conteudo, vocab, stats: { totalTokens, totalUnicas:0, novas:0, intermediarias:0, conhecidas:0, progresso:0 } }; computeStats(state.textos[id]); state.ui.textoAtualId = id; state.ui.paginaAtual = 0; }
+    saveDB(); limparFormulario(); renderAll(); els.detailsNovoTexto.removeAttribute('open');
+  }
+
+  function limparFormulario() { els.tituloTexto.value = ''; els.inputTexto.value = ''; els.seletorIdioma.value = 'en-US'; }
+  function renderAll() { renderLibrary(); renderCurrentText(); renderReader(); renderVocabTable(); renderVocabGlobal(); renderWordPanel(); bindStatusButtons(); }
+  window.abrirTexto = function(id) { if(state.textos[id]) { state.ui.textoAtualId = id; state.ui.paginaAtual = 0; syncTextWithGlobal(state.textos[id]); saveDB(); renderAll(); els.detailsNovoTexto.removeAttribute('open'); window.scrollTo({top:0}); } };
+  window.preencherFormularioEdicao = function(id) { const t = state.textos[id]; if(t) { state.ui.textoAtualId = id; t._editingSource = 'form'; els.tituloTexto.value = t.titulo; els.seletorIdioma.value = t.idioma; els.inputTexto.value = t.conteudo; renderAll(); els.detailsNovoTexto.setAttribute('open', 'true'); window.scrollTo({top:0}); } };
+  function exportarTudo() { baixarJSON(state, 'lingq_backup.json'); }
+  function exportarTextoAtual() { const t = getCurrentText(); if(t) baixarJSON(t, `${slugify(t.titulo)}.json`); else alert('Nenhum texto.'); }
+  function importarJSON(e) { const file = e.target.files[0]; if(!file) return; const reader = new FileReader(); reader.onload = ev => { try { const parsed = JSON.parse(ev.target.result); if(parsed.textos && parsed.vocabularioGlobal) { Object.assign(state.vocabularioGlobal, parsed.vocabularioGlobal); Object.assign(state.textos, parsed.textos); for(let id in state.textos) syncTextWithGlobal(state.textos[id]); if(!state.ui.textoAtualId && Object.keys(state.textos).length) state.ui.textoAtualId = Object.keys(state.textos)[0]; saveDB(); renderAll(); alert('Backup importado.'); } else if(parsed.id && parsed.vocab) { const newId = uid(); state.textos[newId] = {...parsed, id:newId}; syncTextWithGlobal(state.textos[newId]); state.ui.textoAtualId = newId; state.ui.paginaAtual = 0; saveDB(); renderAll(); alert('Texto importado.'); } } catch(e) { alert('JSON inválido.'); } finally { e.target.value = ''; } }; reader.readAsText(file); }
+  function excluirTextoAtual() { const t = getCurrentText(); if(t && confirm(`Excluir "${t.titulo}"?`)) { delete state.textos[t.id]; const ids = Object.keys(state.textos); state.ui.textoAtualId = ids[0] || null; palavraAtual=null; elementoAtual=null; saveDB(); renderAll(); } }
+  function baixarJSON(data, name) { const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'}); const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
+  function slugify(t) { return t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')||'texto'; }
+  function escapeHtml(s) { return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'); }
+
+  els.btnSalvarTexto.addEventListener('click', salvarOuAtualizarTexto); els.btnNovoFormulario.addEventListener('click', limparFormulario); els.btnSpeakWord.addEventListener('click', falarPalavra); els.filterStatus.addEventListener('change', renderVocabTable); els.sortVocab.addEventListener('change', renderVocabTable); els.filterGlobalStatus.addEventListener('change', renderVocabGlobal); els.sortGlobal.addEventListener('change', renderVocabGlobal); els.btnExportAll.addEventListener('click', exportarTudo); els.inputImportJson.addEventListener('change', importarJSON); els.btnExportCurrent.addEventListener('click', exportarTextoAtual); els.btnDeleteCurrent.addEventListener('click', excluirTextoAtual); els.btnEditTranslation.addEventListener('click', editarTraducaoManual);
+  document.querySelectorAll('.tab-btn').forEach(btn=>btn.addEventListener('click',()=>setActiveTab(btn.dataset.tab)));
+  els.inputEpubFile.addEventListener('change', async (e) => { const file = e.target.files[0]; if(!file) return; try { const ext = await extractTextFromEpub(file); els.inputTexto.value = ext; if(!els.tituloTexto.value.trim()) els.tituloTexto.value = file.name.replace(/\.epub$/i,''); els.detailsNovoTexto.setAttribute('open', 'true'); alert('Extraído!'); } catch(err) { alert('Erro: '+err.message); } e.target.value = ''; });
+
+  initDBAndLoad();
+</script>
+</body>
+</html>
