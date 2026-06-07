@@ -60,7 +60,7 @@
     .chip { padding: 6px 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); }
     
     .reader-area { min-height: 340px; line-height: 2.4; font-size: 1.15rem; background: #fff; border: 1px solid var(--border); border-radius: 14px 14px 0 0; padding: 18px; white-space: pre-wrap; border-bottom: none; }
-    .pagination-bar { background: var(--surface-2); padding: 12px 18px; border: 1px solid var(--border); border-radius: 0 0 14px 14px; display: flex; justify-content: space-between; align-items: center; }
+    .pagination-bar { background: var(--surface-2); padding: 12px 18px; border: 1px solid var(--border); border-radius: 0 0 14px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
     
     .palavra { cursor: pointer; padding: 4px 6px; border-radius: 8px; transition: background .15s; display: inline-block; margin: 0 1px; }
     .palavra:hover { background: #dbeafe; }
@@ -122,6 +122,7 @@
       td { border: none; position: relative; padding: 4px 0 4px 40%; text-align: left; }
       td::before { content: attr(data-label); position: absolute; left: 0; width: 35%; padding-right: 10px; white-space: nowrap; font-weight: 600; color: var(--muted); font-size: 0.85rem; }
       .audio-btn { align-self: flex-start; }
+      .pagination-bar { flex-direction: column; }
     }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -143,7 +144,7 @@
 <body>
 <div class="container">
   <div class="header">
-    <div><h1>📚 Mini LingQ Pro</h1><p class="subtitle">Áudio nativo em APK (Capacitor) + Tradução MyMemory</p></div>
+    <div><h1>📚 Mini LingQ Pro</h1><p class="subtitle">Áudio automático ao clicar + Posição salva</p></div>
     <div class="row"><button class="secondary" id="btnExportAll">Backup</button><label class="file-btn" for="inputImportJson">Importar</label><input type="file" id="inputImportJson" accept="application/json,.json" /></div>
   </div>
 
@@ -327,15 +328,12 @@
     for(const id in state.textos) { const t = state.textos[id]; if(t.vocab && t.vocab[termo]) { t.vocab[termo].status = novoStatus; t.vocab[termo].ultimaInteracao = state.vocabularioGlobal[termo].ultimaInteracao; if (novoStatus === 1 && interLevel !== null) t.vocab[termo].interLevel = interLevel; else if (novoStatus !== 1) delete t.vocab[termo].interLevel; computeStats(t); } }
   }
 
-  // ---------- SALVAR POSIÇÃO DE LEITURA ----------
   function salvarPosicaoLeitura(textoId, pagina) {
     if (!textoId) return;
     if (!state.textos[textoId]) return;
     state.textos[textoId].ultimaPagina = pagina;
     state.textos[textoId].ultimaLeitura = nowISO();
     saveDB();
-    
-    // Mostrar indicador visual
     const indicator = document.getElementById('saveIndicator');
     indicator.classList.add('show');
     setTimeout(() => indicator.classList.remove('show'), 1500);
@@ -356,41 +354,48 @@
     if(textParts.length === 0) throw new Error('Sem texto.'); return textParts.join('\n\n').replace(/\s+/g, ' ').trim();
   }
 
-  async function falarPalavra() {
-    const texto = getCurrentText();
-    if (!texto || !palavraAtual) return;
-    const palavra = palavraAtual.original;
-    const lang = texto.idioma;
-
-    if (window.CapacitorTTS) {
-      try {
-        await window.CapacitorTTS.speak({ text: palavra, lang: lang, rate: 0.9 });
-        return;
-      } catch (err) { console.warn('Falha no plugin nativo:', err); }
+  // ---------- FUNÇÃO DE ÁUDIO OTIMIZADA ----------
+  let audioAtualmenteTocando = null;
+  
+  async function falarPalavra(textoParaFalar, lang) {
+    // Cancela qualquer áudio que esteja tocando
+    if (audioAtualmenteTocando) {
+      audioAtualmenteTocando.pause();
+      audioAtualmenteTocando = null;
     }
-
+    
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(palavra);
+      const utterance = new SpeechSynthesisUtterance(textoParaFalar);
       utterance.lang = lang;
-      utterance.rate = 0.9;
+      utterance.rate = 0.85;
+      
       const speakWithVoice = () => {
         const voices = window.speechSynthesis.getVoices();
         const voice = voices.find(v => v.lang.startsWith(lang.split('-')[0])) || voices[0];
         if (voice) utterance.voice = voice;
         window.speechSynthesis.speak(utterance);
       };
-      if (window.speechSynthesis.getVoices().length) speakWithVoice();
-      else window.speechSynthesis.onvoiceschanged = speakWithVoice;
+      
+      if (window.speechSynthesis.getVoices().length) {
+        speakWithVoice();
+      } else {
+        window.speechSynthesis.onvoiceschanged = speakWithVoice;
+      }
       return;
     }
-
+    
+    // Fallback para Google TTS
     try {
       const langCode = lang.split('-')[0];
-      const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(palavra)}&tl=${langCode}&client=tw-ob`;
+      const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(textoParaFalar)}&tl=${langCode}&client=tw-ob`;
       const audio = new Audio(url);
+      audioAtualmenteTocando = audio;
       audio.play().catch(e => console.warn('Google TTS falhou:', e));
-    } catch (e) { console.error('Nenhum método de áudio funcionou', e); alert('Não foi possível reproduzir o áudio.'); }
+      audio.onended = () => { audioAtualmenteTocando = null; };
+    } catch (e) {
+      console.error('Erro no áudio:', e);
+    }
   }
 
   async function buscarTraducao(palavraExibida, termo, idiomaCompleto) {
@@ -478,8 +483,18 @@
       if(isWordToken(token)) {
         const termo = normalizeWord(token); const wordData = texto.vocab[termo] || { status: 0 };
         const span = document.createElement('span'); span.className = `palavra ${getStatusClass(wordData)}`; span.textContent = token;
-        span.addEventListener('click', () => { abrirPainelPalavra(token, termo, span); });
-        span.addEventListener('dblclick', () => { abrirPainelPalavra(token, termo, span); mudarStatus(2, null); });
+        // Áudio automático ao clicar na palavra!
+        span.addEventListener('click', (e) => {
+          e.stopPropagation();
+          abrirPainelPalavra(token, termo, span);
+          falarPalavra(token, texto.idioma);  // Áudio automático!
+        });
+        span.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          abrirPainelPalavra(token, termo, span);
+          mudarStatus(2, null);
+          falarPalavra(token, texto.idioma);  // Áudio também no duplo clique
+        });
         els.readerArea.appendChild(span);
       } else els.readerArea.appendChild(document.createTextNode(token));
     });
@@ -600,12 +615,11 @@
     items.sort((a,b)=>{ if(sort==='freq-desc') return b.ocorrencias - a.ocorrencias; if(sort==='recent-desc') return new Date(b.ultimaInteracao||0)-new Date(a.ultimaInteracao||0); if(sort==='status') return a.status - b.status; return a.termo.localeCompare(b.termo); });
     els.vocabTableBody.innerHTML = items.map(i=>{
       let badgeClass = `badge-${i.status}`; if (i.status === 1) badgeClass += i.interLevel === 1 ? '-dark' : '-light'; let statusLabelText = statusLabel(i.status); if (i.status === 1) statusLabelText += i.interLevel === 1 ? ' esc' : ' cla';
-      return `<tr><td data-label="Palavra">${escapeHtml(i.termo)}</td><td data-label="Status"><span class="badge ${badgeClass}">${statusLabelText}</span></td><td data-label="Tradução">${escapeHtml(i.traducoes?.[0]||'-')}</td><td data-label="Oc">${i.ocorrencias}</td><td data-label="Última">${formatDate(i.ultimaInteracao)}</td><td data-label="Ouvir"><button class="audio-btn small" data-word="${escapeHtml(i.termo)}" data-original="${escapeHtml(i.termo)}">🔊</button></td></tr>`;
-    }).join(''); attachAudioButtonsToTable(els.vocabTableBody);
+      return `<tr><td data-label="Palavra">${escapeHtml(i.termo)}</td><td data-label="Status"><span class="badge ${badgeClass}">${statusLabelText}</span></td><td data-label="Tradução">${escapeHtml(i.traducoes?.[0]||'-')}</td><td data-label="Oc">${i.ocorrencias}</td><td data-label="Última">${formatDate(i.ultimaInteracao)}</td><td data-label="Ouvir"><button class="audio-btn small" data-word="${escapeHtml(i.termo)}" data-original="${escapeHtml(i.termo)}" data-lang="${texto.idioma}">🔊</button></td>`; }).join(''); 
+    attachAudioButtonsToTable(els.vocabTableBody, texto.idioma);
   }
 
   function renderVocabGlobal() {
-    // CORREÇÃO: Renderiza mesmo sem texto ativo
     const items = Object.entries(state.vocabularioGlobal).map(([termo,data])=>{ 
       let totalOcorrencias = 0; 
       for(const id in state.textos) if(state.textos[id].vocab?.[termo]) totalOcorrencias += state.textos[id].vocab[termo].ocorrencias; 
@@ -629,31 +643,35 @@
       return;
     }
     
+    const textoAtual = getCurrentText();
+    const lang = textoAtual ? textoAtual.idioma : 'en-US';
+    
     els.globalVocabTableBody.innerHTML = filtered.map(i=>{
       let badgeClass = `badge-${i.status}`; 
       if (i.status === 1) badgeClass += i.interLevel === 1 ? '-dark' : '-light'; 
       let statusLabelText = statusLabel(i.status); 
       if (i.status === 1) statusLabelText += i.interLevel === 1 ? ' esc' : ' cla';
-      return `<tr><td data-label="Palavra" class="global-word-click" data-termo="${escapeHtml(i.termo)}" data-original="${escapeHtml(i.termo)}" style="cursor:pointer;color:var(--primary);">${escapeHtml(i.termo)}</td><td data-label="Status"><span class="badge ${badgeClass}">${statusLabelText}</span></td><td data-label="Tradução">${escapeHtml(i.traducoes[0]||'-')}</td><td data-label="Total">${i.totalOcorrencias}</td><td data-label="Última">${formatDate(i.ultimaInteracao)}</td><td data-label="Ouvir"><button class="audio-btn small" data-word="${escapeHtml(i.termo)}" data-original="${escapeHtml(i.termo)}">🔊</button></td></tr>`;
-    }).join('');
+      return `<tr><td data-label="Palavra" class="global-word-click" data-termo="${escapeHtml(i.termo)}" data-original="${escapeHtml(i.termo)}" style="cursor:pointer;color:var(--primary);">${escapeHtml(i.termo)}</td><td data-label="Status"><span class="badge ${badgeClass}">${statusLabelText}</span></td><td data-label="Tradução">${escapeHtml(i.traducoes[0]||'-')}</td><td data-label="Total">${i.totalOcorrencias}</td><td data-label="Última">${formatDate(i.ultimaInteracao)}</td><td data-label="Ouvir"><button class="audio-btn small" data-word="${escapeHtml(i.termo)}" data-original="${escapeHtml(i.termo)}" data-lang="${lang}">🔊</button></td>`; }).join('');
+    
     document.querySelectorAll('#globalVocabTableBody .global-word-click').forEach(cell=>{ 
       cell.removeEventListener('click', globalClick); 
       cell.addEventListener('click', globalClick); 
     }); 
-    attachAudioButtonsToTable(els.globalVocabTableBody);
+    attachAudioButtonsToTable(els.globalVocabTableBody, lang);
     
     function globalClick(e) { 
       const termo = this.dataset.termo, original = this.dataset.original; 
       if(termo && getCurrentText()) { 
         const fakeSpan = document.createElement('span'); 
         abrirPainelPalavra(original, termo, fakeSpan); 
+        falarPalavra(original, getCurrentText().idioma);
       } else if (termo && !getCurrentText()) {
         alert('Selecione um texto primeiro para ver os detalhes da palavra.');
       }
     }
   }
 
-  function attachAudioButtonsToTable(tableBody) { 
+  function attachAudioButtonsToTable(tableBody, lang) { 
     tableBody.querySelectorAll('.audio-btn').forEach(btn=>{ 
       btn.removeEventListener('click', audioHandler); 
       btn.addEventListener('click', audioHandler); 
@@ -661,10 +679,11 @@
     function audioHandler(e) { 
       e.stopPropagation(); 
       const word = this.dataset.word, orig = this.dataset.original; 
+      const audioLang = this.dataset.lang || lang;
       if(word && getCurrentText()) { 
         const fake = document.createElement('span'); 
         abrirPainelPalavra(orig, word, fake); 
-        falarPalavra(); 
+        falarPalavra(orig, audioLang); 
       } else if (word && !getCurrentText()) {
         alert('Selecione um texto primeiro para ouvir a palavra.');
       }
@@ -724,7 +743,6 @@
   window.abrirTexto = function(id) { 
     if(state.textos[id]) { 
       state.ui.textoAtualId = id; 
-      // Carregar página salva
       const paginaSalva = carregarPosicaoLeitura(id);
       state.ui.paginaAtual = paginaSalva;
       syncTextWithGlobal(state.textos[id]); 
@@ -794,7 +812,7 @@
 
   els.btnSalvarTexto.addEventListener('click', salvarOuAtualizarTexto); 
   els.btnNovoFormulario.addEventListener('click', limparFormulario); 
-  els.btnSpeakWord.addEventListener('click', falarPalavra); 
+  els.btnSpeakWord.addEventListener('click', () => { if(palavraAtual && getCurrentText()) falarPalavra(palavraAtual.original, getCurrentText().idioma); }); 
   els.filterStatus.addEventListener('change', renderVocabTable); 
   els.sortVocab.addEventListener('change', renderVocabTable); 
   els.filterGlobalStatus.addEventListener('change', renderVocabGlobal); 
