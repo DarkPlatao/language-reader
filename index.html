@@ -619,45 +619,92 @@
     attachAudioButtonsToTable(els.vocabTableBody, texto.idioma);
   }
 
-  function renderVocabGlobal() {
-    const items = Object.entries(state.vocabularioGlobal).map(([termo,data])=>{ 
-      let totalOcorrencias = 0; 
-      for(const id in state.textos) if(state.textos[id].vocab?.[termo]) totalOcorrencias += state.textos[id].vocab[termo].ocorrencias; 
-      return { termo, status: data.status, interLevel: data.interLevel, traducoes: data.traducoes||[], ultimaInteracao: data.ultimaInteracao, totalOcorrencias }; 
+function renderVocabGlobal() {
+    const items = Object.entries(state.vocabularioGlobal).map(([termo, data]) => {
+        let totalOcorrencias = 0;
+        for (const id in state.textos) {
+            if (state.textos[id].vocab?.[termo]) {
+                totalOcorrencias += state.textos[id].vocab[termo].ocorrencias;
+            }
+        }
+        return {
+            termo,
+            status: data.status,
+            interLevel: data.interLevel,
+            traducoes: data.traducoes || [],
+            ultimaInteracao: data.ultimaInteracao,
+            totalOcorrencias
+        };
     });
-    const filter = els.filterGlobalStatus.value, sort = els.sortGlobal.value; 
-    let filtered = items;
-    if (filter === 'untranslated') filtered = items.filter(i=>!i.traducoes.length); 
-    else if (filter === '1-light') filtered = items.filter(i=> i.status === 1 && i.interLevel === 0); 
-    else if (filter === '1-dark') filtered = items.filter(i=> i.status === 1 && i.interLevel === 1); 
-    else if (filter !== 'all') filtered = items.filter(i=>String(i.status) === filter);
-    filtered.sort((a,b)=>{ 
-      if(sort==='freq-desc') return b.totalOcorrencias - a.totalOcorrencias; 
-      if(sort==='recent-desc') return new Date(b.ultimaInteracao||0)-new Date(a.ultimaInteracao||0); 
-      if(sort==='status') return a.status - b.status; 
-      return a.termo.localeCompare(b.termo); 
-    });
-    
-    if (filtered.length === 0) {
-      els.globalVocabTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Nenhuma palavra encontrada. Adicione textos para começar!</td></tr>';
-      return;
+
+    // Se não houver palavras, mostra mensagem e limpa a tabela
+    if (items.length === 0) {
+        els.globalVocabTableBody.innerHTML = `<tr><td colspan="6" style="text-align:center;">📭 Nenhuma palavra no vocabulário global ainda. Clique em palavras nos textos para começar!</td></tr>`;
+        return;
     }
-    
+
+    const filter = els.filterGlobalStatus.value;
+    const sort = els.sortGlobal.value;
+    let filtered = [...items];
+
+    // Aplicar filtros
+    if (filter === 'untranslated') {
+        filtered = filtered.filter(i => !i.traducoes.length);
+    } else if (filter === '1-light') {
+        filtered = filtered.filter(i => i.status === 1 && i.interLevel === 0);
+    } else if (filter === '1-dark') {
+        filtered = filtered.filter(i => i.status === 1 && i.interLevel === 1);
+    } else if (filter !== 'all') {
+        filtered = filtered.filter(i => String(i.status) === filter);
+    }
+
+    // Ordenar
+    if (sort === 'freq-desc') {
+        filtered.sort((a, b) => b.totalOcorrencias - a.totalOcorrencias);
+    } else if (sort === 'recent-desc') {
+        filtered.sort((a, b) => new Date(b.ultimaInteracao || 0) - new Date(a.ultimaInteracao || 0));
+    } else if (sort === 'status') {
+        filtered.sort((a, b) => a.status - b.status);
+    } else {
+        filtered.sort((a, b) => a.termo.localeCompare(b.termo));
+    }
+
     const textoAtual = getCurrentText();
     const lang = textoAtual ? textoAtual.idioma : 'en-US';
-    
-    els.globalVocabTableBody.innerHTML = filtered.map(i=>{
-      let badgeClass = `badge-${i.status}`; 
-      if (i.status === 1) badgeClass += i.interLevel === 1 ? '-dark' : '-light'; 
-      let statusLabelText = statusLabel(i.status); 
-      if (i.status === 1) statusLabelText += i.interLevel === 1 ? ' esc' : ' cla';
-      return `<tr><td data-label="Palavra" class="global-word-click" data-termo="${escapeHtml(i.termo)}" data-original="${escapeHtml(i.termo)}" style="cursor:pointer;color:var(--primary);">${escapeHtml(i.termo)}</td><td data-label="Status"><span class="badge ${badgeClass}">${statusLabelText}</span></td><td data-label="Tradução">${escapeHtml(i.traducoes[0]||'-')}</td><td data-label="Total">${i.totalOcorrencias}</td><td data-label="Última">${formatDate(i.ultimaInteracao)}</td><td data-label="Ouvir"><button class="audio-btn small" data-word="${escapeHtml(i.termo)}" data-original="${escapeHtml(i.termo)}" data-lang="${lang}">🔊</button></td>`; }).join('');
-    
-    document.querySelectorAll('#globalVocabTableBody .global-word-click').forEach(cell=>{ 
-      cell.removeEventListener('click', globalClick); 
-      cell.addEventListener('click', globalClick); 
-    }); 
+
+    els.globalVocabTableBody.innerHTML = filtered.map(i => {
+        let badgeClass = `badge-${i.status}`;
+        if (i.status === 1) badgeClass += i.interLevel === 1 ? '-dark' : '-light';
+        let statusLabelText = statusLabel(i.status);
+        if (i.status === 1) statusLabelText += i.interLevel === 1 ? ' esc' : ' cla';
+        return `<tr>
+            <td data-label="Palavra" class="global-word-click" data-termo="${escapeHtml(i.termo)}" data-original="${escapeHtml(i.termo)}" style="cursor:pointer;color:var(--primary);">${escapeHtml(i.termo)}</td>
+            <td data-label="Status"><span class="badge ${badgeClass}">${statusLabelText}</span></td>
+            <td data-label="Tradução">${escapeHtml(i.traducoes[0] || '-')}</td>
+            <td data-label="Total">${i.totalOcorrencias}</td>
+            <td data-label="Última">${formatDate(i.ultimaInteracao)}</td>
+            <td data-label="Ouvir"><button class="audio-btn small" data-word="${escapeHtml(i.termo)}" data-original="${escapeHtml(i.termo)}" data-lang="${lang}">🔊</button></td>
+        </tr>`;
+    }).join('');
+
+    // Reattach event listeners
+    document.querySelectorAll('#globalVocabTableBody .global-word-click').forEach(cell => {
+        cell.removeEventListener('click', globalClick);
+        cell.addEventListener('click', globalClick);
+    });
     attachAudioButtonsToTable(els.globalVocabTableBody, lang);
+
+    function globalClick(e) {
+        const termo = this.dataset.termo, original = this.dataset.original;
+        if (termo && getCurrentText()) {
+            const fakeSpan = document.createElement('span');
+            abrirPainelPalavra(original, termo, fakeSpan);
+            falarPalavra(original, getCurrentText().idioma);
+        } else if (termo && !getCurrentText()) {
+            alert('Selecione um texto primeiro para ver os detalhes da palavra.');
+        }
+    }
+}
     
     function globalClick(e) { 
       const termo = this.dataset.termo, original = this.dataset.original; 
