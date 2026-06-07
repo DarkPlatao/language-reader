@@ -216,10 +216,12 @@
               <div style="flex:1;"><label>Filtrar</label><select id="filterStatus"><option value="all">Todos</option><option value="0">Novas</option><option value="1-light">Inter. claro</option><option value="1-dark">Inter. escuro</option><option value="2">Conhecidas</option><option value="untranslated">Sem tradução</option></select></div>
               <div style="flex:1;"><label>Ordenar</label><select id="sortVocab"><option value="alpha">A-Z</option><option value="freq-desc">Frequentes</option><option value="recent-desc">Recentes</option><option value="status">Status</option></select></div>
             </div>
-            <div class="table-wrap"><table>
-              <thead><tr><th>Palavra</th><th>Status</th><th>Tradução</th><th>Ocorrências</th><th>Última</th><th>Ouvir</th></tr></thead>
-              <tbody id="vocabTableBody"></tbody>
-            </table>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Palavra</th><th>Status</th><th>Tradução</th><th>Ocorrências</th><th>Última</th><th>Ouvir</th></tr></thead>
+                <tbody id="vocabTableBody"></tbody>
+              </table>
+            </div>
           </div>
         </div>
 
@@ -229,10 +231,12 @@
               <div style="flex:1;"><label>Filtrar</label><select id="filterGlobalStatus"><option value="all">Todos</option><option value="0">Novas</option><option value="1-light">Inter. claro</option><option value="1-dark">Inter. escuro</option><option value="2">Conhecidas</option><option value="untranslated">Sem tradução</option></select></div>
               <div style="flex:1;"><label>Ordenar</label><select id="sortGlobal"><option value="alpha">A-Z</option><option value="freq-desc">Frequentes</option><option value="recent-desc">Recentes</option><option value="status">Status</option></select></div>
             </div>
-            <div class="table-wrap"><table>
-              <thead><tr><th>Palavra</th><th>Status</th><th>Tradução</th><th>Total</th><th>Última</th><th>Ouvir</th></tr></thead>
-              <tbody id="globalVocabTableBody"></tbody>
-            </table>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Palavra</th><th>Status</th><th>Tradução</th><th>Total</th><th>Última</th><th>Ouvir</th></tr></thead>
+                <tbody id="globalVocabTableBody"></tbody>
+              </table>
+            </div>
           </div>
         </div>
       </section>
@@ -619,7 +623,7 @@
     attachAudioButtonsToTable(els.vocabTableBody, texto.idioma);
   }
 
-function renderVocabGlobal() {
+  function renderVocabGlobal() {
     const items = Object.entries(state.vocabularioGlobal).map(([termo, data]) => {
         let totalOcorrencias = 0;
         for (const id in state.textos) {
@@ -637,7 +641,6 @@ function renderVocabGlobal() {
         };
     });
 
-    // Se não houver palavras, mostra mensagem e limpa a tabela
     if (items.length === 0) {
         els.globalVocabTableBody.innerHTML = `<tr><td colspan="6" style="text-align:center;">📭 Nenhuma palavra no vocabulário global ainda. Clique em palavras nos textos para começar!</td></tr>`;
         return;
@@ -647,7 +650,6 @@ function renderVocabGlobal() {
     const sort = els.sortGlobal.value;
     let filtered = [...items];
 
-    // Aplicar filtros
     if (filter === 'untranslated') {
         filtered = filtered.filter(i => !i.traducoes.length);
     } else if (filter === '1-light') {
@@ -658,7 +660,6 @@ function renderVocabGlobal() {
         filtered = filtered.filter(i => String(i.status) === filter);
     }
 
-    // Ordenar
     if (sort === 'freq-desc') {
         filtered.sort((a, b) => b.totalOcorrencias - a.totalOcorrencias);
     } else if (sort === 'recent-desc') {
@@ -687,7 +688,6 @@ function renderVocabGlobal() {
         </tr>`;
     }).join('');
 
-    // Reattach event listeners
     document.querySelectorAll('#globalVocabTableBody .global-word-click').forEach(cell => {
         cell.removeEventListener('click', globalClick);
         cell.addEventListener('click', globalClick);
@@ -703,18 +703,6 @@ function renderVocabGlobal() {
         } else if (termo && !getCurrentText()) {
             alert('Selecione um texto primeiro para ver os detalhes da palavra.');
         }
-    }
-}
-    
-    function globalClick(e) { 
-      const termo = this.dataset.termo, original = this.dataset.original; 
-      if(termo && getCurrentText()) { 
-        const fakeSpan = document.createElement('span'); 
-        abrirPainelPalavra(original, termo, fakeSpan); 
-        falarPalavra(original, getCurrentText().idioma);
-      } else if (termo && !getCurrentText()) {
-        alert('Selecione um texto primeiro para ver os detalhes da palavra.');
-      }
     }
   }
 
