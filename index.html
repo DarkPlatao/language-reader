@@ -105,6 +105,9 @@
     .audio-btn:hover { background: #dbe7ff; }
     
     .sheet-handle { display: none; width: 40px; height: 5px; background: var(--border); border-radius: 10px; margin: 0 auto 16px auto; }
+    
+    .save-indicator { position: fixed; bottom: 20px; right: 20px; background: var(--primary); color: white; padding: 8px 16px; border-radius: 30px; font-size: 0.8rem; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 2000; }
+    .save-indicator.show { opacity: 1; }
 
     @media (max-width: 980px) {
       .layout { grid-template-columns: 1fr; padding-bottom: 100px; }
@@ -122,9 +125,7 @@
     }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <!-- Plugin Capacitor (opcional, será usado se disponível) -->
   <script>
-    // Detecta se o Capacitor está presente e se o plugin TextToSpeech foi registrado
     window.CapacitorTTS = null;
     window.addEventListener('DOMContentLoaded', async () => {
       if (window.Capacitor && window.Capacitor.isNative) {
@@ -200,6 +201,10 @@
           <div class="pagination-bar hidden" id="paginationWrap">
             <button id="btnPrevPage" class="secondary small">⬅️ Anterior</button>
             <span class="muted font-weight-bold" id="pageInfo">Página 1</span>
+            <div style="display: flex; gap: 8px;">
+              <input type="number" id="pageJumpInput" style="width: 70px; padding: 6px; text-align: center;" min="1" value="1">
+              <button id="btnPageJump" class="secondary small">Ir</button>
+            </div>
             <button id="btnNextPage" class="secondary small">Próxima ➡️</button>
           </div>
         </div>
@@ -248,16 +253,17 @@
     </aside>
   </div>
 </div>
+<div id="saveIndicator" class="save-indicator">💾 Posição salva</div>
 
 <script>
   // ---------- INDEXEDDB LAYER ----------
-  const DB_NAME = 'MiniLingQDB'; const DB_VERSION = 2; let db = null;
+  const DB_NAME = 'MiniLingQDB'; const DB_VERSION = 3; let db = null;
   async function openDB() { return new Promise((resolve, reject) => { const request = indexedDB.open(DB_NAME, DB_VERSION); request.onupgradeneeded = (e) => { const db_ = e.target.result; if (!db_.objectStoreNames.contains('state')) db_.createObjectStore('state', { keyPath: 'id' }); }; request.onsuccess = (e) => { db = e.target.result; resolve(db); }; request.onerror = (e) => reject(e.target.error); }); }
   async function loadStateFromDB() { if (!db) await openDB(); return new Promise((resolve) => { const tx = db.transaction('state', 'readonly'); const store = tx.objectStore('state'); const getReq = store.get('main'); getReq.onsuccess = () => resolve(getReq.result ? getReq.result.data : null); getReq.onerror = () => resolve(null); }); }
   async function saveStateToDB(data) { if (!db) await openDB(); const tx = db.transaction('state', 'readwrite'); const store = tx.objectStore('state'); store.put({ id: 'main', data: data }); return new Promise((resolve) => { tx.oncomplete = resolve; }); }
 
   // ---------- GLOBAL STATE ----------
-  let state = { versao: 4, textos: {}, vocabularioGlobal: {}, ui: { textoAtualId: null, paginaAtual: 0 } };
+  let state = { versao: 5, textos: {}, vocabularioGlobal: {}, ui: { textoAtualId: null, paginaAtual: 0 } };
   const TOKENS_POR_PAGINA = 600;
 
   function migrarParaInterLevel(stateObj) {
@@ -270,7 +276,7 @@
   async function initDBAndLoad() {
     await openDB(); let saved = await loadStateFromDB();
     if (saved) { state = saved; migrarParaInterLevel(state); if(state.ui.paginaAtual === undefined) state.ui.paginaAtual = 0; } 
-    else { state = { versao: 4, textos: {}, vocabularioGlobal: {}, ui: { textoAtualId: null, paginaAtual: 0 } }; await saveStateToDB(state); }
+    else { state = { versao: 5, textos: {}, vocabularioGlobal: {}, ui: { textoAtualId: null, paginaAtual: 0 } }; await saveStateToDB(state); }
     renderAll();
   }
 
@@ -321,6 +327,28 @@
     for(const id in state.textos) { const t = state.textos[id]; if(t.vocab && t.vocab[termo]) { t.vocab[termo].status = novoStatus; t.vocab[termo].ultimaInteracao = state.vocabularioGlobal[termo].ultimaInteracao; if (novoStatus === 1 && interLevel !== null) t.vocab[termo].interLevel = interLevel; else if (novoStatus !== 1) delete t.vocab[termo].interLevel; computeStats(t); } }
   }
 
+  // ---------- SALVAR POSIÇÃO DE LEITURA ----------
+  function salvarPosicaoLeitura(textoId, pagina) {
+    if (!textoId) return;
+    if (!state.textos[textoId]) return;
+    state.textos[textoId].ultimaPagina = pagina;
+    state.textos[textoId].ultimaLeitura = nowISO();
+    saveDB();
+    
+    // Mostrar indicador visual
+    const indicator = document.getElementById('saveIndicator');
+    indicator.classList.add('show');
+    setTimeout(() => indicator.classList.remove('show'), 1500);
+  }
+
+  function carregarPosicaoLeitura(textoId) {
+    const texto = state.textos[textoId];
+    if (texto && texto.ultimaPagina !== undefined && texto.ultimaPagina !== null) {
+      return texto.ultimaPagina;
+    }
+    return 0;
+  }
+
   async function extractTextFromEpub(file) {
     const zip = await JSZip.loadAsync(file); let textParts = [];
     const htmlFiles = Object.keys(zip.files).filter(name => /\.(xhtml|html|htm)$/i.test(name) && !name.includes('/toc.') && !name.includes('/nav.'));
@@ -328,68 +356,43 @@
     if(textParts.length === 0) throw new Error('Sem texto.'); return textParts.join('\n\n').replace(/\s+/g, ' ').trim();
   }
 
-  // --------------------------------------------------------------
-  // FUNÇÃO DE ÁUDIO COM PLUGIN NATIVO (CAPACITOR) + FALLBACKS
-  // --------------------------------------------------------------
   async function falarPalavra() {
     const texto = getCurrentText();
     if (!texto || !palavraAtual) return;
     const palavra = palavraAtual.original;
-    const lang = texto.idioma; // ex: "en-US"
+    const lang = texto.idioma;
 
-    // 1. Tentar usar plugin nativo do Capacitor (se disponível)
     if (window.CapacitorTTS) {
       try {
-        await window.CapacitorTTS.speak({
-          text: palavra,
-          lang: lang,
-          rate: 0.9
-        });
-        console.log('Áudio nativo (Capacitor)');
+        await window.CapacitorTTS.speak({ text: palavra, lang: lang, rate: 0.9 });
         return;
-      } catch (err) {
-        console.warn('Falha no plugin nativo:', err);
-      }
+      } catch (err) { console.warn('Falha no plugin nativo:', err); }
     }
 
-    // 2. Fallback para Web Speech API
     if (window.speechSynthesis) {
-      // Cancela qualquer fala anterior para não empilhar
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(palavra);
       utterance.lang = lang;
       utterance.rate = 0.9;
-      
-      // Aguarda vozes carregarem (útil em alguns navegadores)
       const speakWithVoice = () => {
         const voices = window.speechSynthesis.getVoices();
         const voice = voices.find(v => v.lang.startsWith(lang.split('-')[0])) || voices[0];
         if (voice) utterance.voice = voice;
         window.speechSynthesis.speak(utterance);
       };
-      if (window.speechSynthesis.getVoices().length) {
-        speakWithVoice();
-      } else {
-        window.speechSynthesis.onvoiceschanged = speakWithVoice;
-      }
+      if (window.speechSynthesis.getVoices().length) speakWithVoice();
+      else window.speechSynthesis.onvoiceschanged = speakWithVoice;
       return;
     }
 
-    // 3. Último recurso: Google Translate TTS (não oficial, pode ser bloqueado)
     try {
       const langCode = lang.split('-')[0];
       const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(palavra)}&tl=${langCode}&client=tw-ob`;
       const audio = new Audio(url);
       audio.play().catch(e => console.warn('Google TTS falhou:', e));
-    } catch (e) {
-      console.error('Nenhum método de áudio funcionou', e);
-      alert('Não foi possível reproduzir o áudio. Verifique se o TTS está disponível.');
-    }
+    } catch (e) { console.error('Nenhum método de áudio funcionou', e); alert('Não foi possível reproduzir o áudio.'); }
   }
 
-  // --------------------------------------------------------------
-  // TRADUÇÃO (MyMemory)
-  // --------------------------------------------------------------
   async function buscarTraducao(palavraExibida, termo, idiomaCompleto) {
     const texto = getCurrentText(); if (!texto || !palavraAtual || palavraAtual.termo !== termo) return;
     const langSigla = idiomaCompleto.split('-')[0];
@@ -431,9 +434,7 @@
     if (novaTraducao && novaTraducao.trim()) salvarTraducaoGlobal(termo, novaTraducao.trim());
   }
 
-  // --------------------------------------------------------------
-  // ELEMENTOS E RENDERIZAÇÃO (mantido igual ao original)
-  // --------------------------------------------------------------
+  // ---------- ELEMENTOS E RENDERIZAÇÃO ----------
   const els = {
     tituloTexto: document.getElementById('tituloTexto'), seletorIdioma: document.getElementById('seletorIdioma'), inputTexto: document.getElementById('inputTexto'),
     btnSalvarTexto: document.getElementById('btnSalvarTexto'), btnNovoFormulario: document.getElementById('btnNovoFormulario'),
@@ -448,7 +449,8 @@
     btnSpeakWord: document.getElementById('btnSpeakWord'), btnExportAll: document.getElementById('btnExportAll'), inputImportJson: document.getElementById('inputImportJson'), btnExportCurrent: document.getElementById('btnExportCurrent'),
     btnDeleteCurrent: document.getElementById('btnDeleteCurrent'), wordEmpty: document.getElementById('wordEmpty'), wordPanel: document.getElementById('wordPanel'),
     filterGlobalStatus: document.getElementById('filterGlobalStatus'), sortGlobal: document.getElementById('sortGlobal'), globalVocabTableBody: document.getElementById('globalVocabTableBody'),
-    inputEpubFile: document.getElementById('inputEpubFile'), btnEditTranslation: document.getElementById('btnEditTranslation'), mobilePanel: document.getElementById('mobilePanel'), btnFecharPainel: document.getElementById('btnFecharPainel'), btnFecharPainelBtn: document.getElementById('btnFecharPainelBtn'), detailsNovoTexto: document.getElementById('detailsNovoTexto')
+    inputEpubFile: document.getElementById('inputEpubFile'), btnEditTranslation: document.getElementById('btnEditTranslation'), mobilePanel: document.getElementById('mobilePanel'), btnFecharPainel: document.getElementById('btnFecharPainel'), btnFecharPainelBtn: document.getElementById('btnFecharPainelBtn'), detailsNovoTexto: document.getElementById('detailsNovoTexto'),
+    pageJumpInput: document.getElementById('pageJumpInput'), btnPageJump: document.getElementById('btnPageJump')
   };
 
   let palavraAtual = null, elementoAtual = null;
@@ -464,7 +466,7 @@
     
     const tokens = tokenize(texto.conteudo);
     const totalPaginas = Math.ceil(tokens.length / TOKENS_POR_PAGINA);
-    let pag = state.ui.paginaAtual || 0;
+    let pag = state.ui.paginaAtual;
     if (pag >= totalPaginas) pag = Math.max(0, totalPaginas - 1);
     state.ui.paginaAtual = pag;
     
@@ -476,7 +478,7 @@
       if(isWordToken(token)) {
         const termo = normalizeWord(token); const wordData = texto.vocab[termo] || { status: 0 };
         const span = document.createElement('span'); span.className = `palavra ${getStatusClass(wordData)}`; span.textContent = token;
-        span.addEventListener('click', () => { abrirPainelPalavra(token, termo, span); falarPalavra(); }); // ao clicar, já toca áudio
+        span.addEventListener('click', () => { abrirPainelPalavra(token, termo, span); });
         span.addEventListener('dblclick', () => { abrirPainelPalavra(token, termo, span); mudarStatus(2, null); });
         els.readerArea.appendChild(span);
       } else els.readerArea.appendChild(document.createTextNode(token));
@@ -485,11 +487,60 @@
     if(totalPaginas > 1) {
       els.paginationWrap.classList.remove('hidden'); els.pageInfo.textContent = `Página ${pag + 1} de ${totalPaginas}`;
       els.btnPrevPage.disabled = pag === 0; els.btnNextPage.disabled = pag >= totalPaginas - 1;
+      if (els.pageJumpInput) els.pageJumpInput.value = pag + 1;
+      if (els.pageJumpInput) els.pageJumpInput.max = totalPaginas;
     } else { els.paginationWrap.classList.add('hidden'); }
   }
 
-  els.btnPrevPage.addEventListener('click', () => { if(state.ui.paginaAtual > 0) { state.ui.paginaAtual--; saveDB(); renderReader(); window.scrollTo({top:0}); } });
-  els.btnNextPage.addEventListener('click', () => { const max = Math.ceil(tokenize(getCurrentText().conteudo).length / TOKENS_POR_PAGINA) - 1; if(state.ui.paginaAtual < max) { state.ui.paginaAtual++; saveDB(); renderReader(); window.scrollTo({top:0}); } });
+  function irParaPagina(pagina) {
+    const texto = getCurrentText();
+    if (!texto) return;
+    const tokens = tokenize(texto.conteudo);
+    const totalPaginas = Math.ceil(tokens.length / TOKENS_POR_PAGINA);
+    if (pagina < 1) pagina = 1;
+    if (pagina > totalPaginas) pagina = totalPaginas;
+    const novaPagina = pagina - 1;
+    if (novaPagina !== state.ui.paginaAtual) {
+      state.ui.paginaAtual = novaPagina;
+      salvarPosicaoLeitura(texto.id, state.ui.paginaAtual);
+      renderReader();
+      window.scrollTo({top: 0, behavior: 'smooth'});
+    }
+  }
+
+  els.btnPrevPage.addEventListener('click', () => { 
+    if(state.ui.paginaAtual > 0) { 
+      state.ui.paginaAtual--; 
+      salvarPosicaoLeitura(getCurrentText()?.id, state.ui.paginaAtual);
+      renderReader(); 
+      window.scrollTo({top:0}); 
+    } 
+  });
+  
+  els.btnNextPage.addEventListener('click', () => { 
+    const texto = getCurrentText();
+    if(texto) {
+      const max = Math.ceil(tokenize(texto.conteudo).length / TOKENS_POR_PAGINA) - 1; 
+      if(state.ui.paginaAtual < max) { 
+        state.ui.paginaAtual++; 
+        salvarPosicaoLeitura(texto.id, state.ui.paginaAtual);
+        renderReader(); 
+        window.scrollTo({top:0}); 
+      }
+    }
+  });
+
+  if (els.btnPageJump) {
+    els.btnPageJump.addEventListener('click', () => {
+      const pagina = parseInt(els.pageJumpInput.value);
+      if (!isNaN(pagina)) irParaPagina(pagina);
+    });
+    if (els.pageJumpInput) {
+      els.pageJumpInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') irParaPagina(parseInt(els.pageJumpInput.value));
+      });
+    }
+  }
 
   function renderLibrary() {
     const textos = Object.values(state.textos).sort((a,b)=>new Date(b.atualizadoEm)-new Date(a.atualizadoEm));
@@ -497,7 +548,8 @@
     if(!textos.length) { els.libraryList.innerHTML = '<div class="empty">Biblioteca vazia.</div>'; return; }
     els.libraryList.innerHTML = textos.map(texto => {
       computeStats(texto); const active = texto.id === state.ui.textoAtualId ? 'active' : ''; const total = texto.stats.totalUnicas || 1;
-      return `<div class="text-item ${active}"><div><div class="text-title">${escapeHtml(texto.titulo)}</div><div class="tiny muted">${escapeHtml(idiomaNome(texto.idioma))} · ${escapeHtml(formatDate(texto.atualizadoEm))}</div></div>
+      const ultimaPaginaInfo = texto.ultimaPagina !== undefined ? ` · Pág. ${texto.ultimaPagina + 1}` : '';
+      return `<div class="text-item ${active}"><div><div class="text-title">${escapeHtml(texto.titulo)}</div><div class="tiny muted">${escapeHtml(idiomaNome(texto.idioma))} · ${escapeHtml(formatDate(texto.atualizadoEm))}${ultimaPaginaInfo}</div></div>
       <div class="progress-wrap"><div class="progress-seg seg-new" style="width:${(texto.stats.novas/total)*100}%"></div><div class="progress-seg seg-mid" style="width:${(texto.stats.intermediarias/total)*100}%"></div><div class="progress-seg seg-known" style="width:${(texto.stats.conhecidas/total)*100}%"></div></div>
       <div class="row-between tiny"><span>${texto.stats.progresso}%</span><span>${texto.stats.totalUnicas} únicas</span></div>
       <div class="row"><button class="small" onclick="abrirTexto('${texto.id}')">Abrir</button><button class="small ghost" onclick="preencherFormularioEdicao('${texto.id}')">Editar</button></div></div>`;
@@ -553,22 +605,91 @@
   }
 
   function renderVocabGlobal() {
-    const items = Object.entries(state.vocabularioGlobal).map(([termo,data])=>{ let totalOcorrencias = 0; for(const id in state.textos) if(state.textos[id].vocab?.[termo]) totalOcorrencias += state.textos[id].vocab[termo].ocorrencias; return { termo, status: data.status, interLevel: data.interLevel, traducoes: data.traducoes||[], ultimaInteracao: data.ultimaInteracao, totalOcorrencias }; });
-    const filter = els.filterGlobalStatus.value, sort = els.sortGlobal.value; let filtered = items;
-    if (filter === 'untranslated') filtered = items.filter(i=>!i.traducoes.length); else if (filter === '1-light') filtered = items.filter(i=> i.status === 1 && i.interLevel === 0); else if (filter === '1-dark') filtered = items.filter(i=> i.status === 1 && i.interLevel === 1); else if (filter !== 'all') filtered = items.filter(i=>String(i.status) === filter);
-    filtered.sort((a,b)=>{ if(sort==='freq-desc') return b.totalOcorrencias - a.totalOcorrencias; if(sort==='recent-desc') return new Date(b.ultimaInteracao||0)-new Date(a.ultimaInteracao||0); if(sort==='status') return a.status - b.status; return a.termo.localeCompare(b.termo); });
+    // CORREÇÃO: Renderiza mesmo sem texto ativo
+    const items = Object.entries(state.vocabularioGlobal).map(([termo,data])=>{ 
+      let totalOcorrencias = 0; 
+      for(const id in state.textos) if(state.textos[id].vocab?.[termo]) totalOcorrencias += state.textos[id].vocab[termo].ocorrencias; 
+      return { termo, status: data.status, interLevel: data.interLevel, traducoes: data.traducoes||[], ultimaInteracao: data.ultimaInteracao, totalOcorrencias }; 
+    });
+    const filter = els.filterGlobalStatus.value, sort = els.sortGlobal.value; 
+    let filtered = items;
+    if (filter === 'untranslated') filtered = items.filter(i=>!i.traducoes.length); 
+    else if (filter === '1-light') filtered = items.filter(i=> i.status === 1 && i.interLevel === 0); 
+    else if (filter === '1-dark') filtered = items.filter(i=> i.status === 1 && i.interLevel === 1); 
+    else if (filter !== 'all') filtered = items.filter(i=>String(i.status) === filter);
+    filtered.sort((a,b)=>{ 
+      if(sort==='freq-desc') return b.totalOcorrencias - a.totalOcorrencias; 
+      if(sort==='recent-desc') return new Date(b.ultimaInteracao||0)-new Date(a.ultimaInteracao||0); 
+      if(sort==='status') return a.status - b.status; 
+      return a.termo.localeCompare(b.termo); 
+    });
+    
+    if (filtered.length === 0) {
+      els.globalVocabTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Nenhuma palavra encontrada. Adicione textos para começar!</td></tr>';
+      return;
+    }
+    
     els.globalVocabTableBody.innerHTML = filtered.map(i=>{
-      let badgeClass = `badge-${i.status}`; if (i.status === 1) badgeClass += i.interLevel === 1 ? '-dark' : '-light'; let statusLabelText = statusLabel(i.status); if (i.status === 1) statusLabelText += i.interLevel === 1 ? ' esc' : ' cla';
+      let badgeClass = `badge-${i.status}`; 
+      if (i.status === 1) badgeClass += i.interLevel === 1 ? '-dark' : '-light'; 
+      let statusLabelText = statusLabel(i.status); 
+      if (i.status === 1) statusLabelText += i.interLevel === 1 ? ' esc' : ' cla';
       return `<tr><td data-label="Palavra" class="global-word-click" data-termo="${escapeHtml(i.termo)}" data-original="${escapeHtml(i.termo)}" style="cursor:pointer;color:var(--primary);">${escapeHtml(i.termo)}</td><td data-label="Status"><span class="badge ${badgeClass}">${statusLabelText}</span></td><td data-label="Tradução">${escapeHtml(i.traducoes[0]||'-')}</td><td data-label="Total">${i.totalOcorrencias}</td><td data-label="Última">${formatDate(i.ultimaInteracao)}</td><td data-label="Ouvir"><button class="audio-btn small" data-word="${escapeHtml(i.termo)}" data-original="${escapeHtml(i.termo)}">🔊</button></td></tr>`;
     }).join('');
-    document.querySelectorAll('#globalVocabTableBody .global-word-click').forEach(cell=>{ cell.removeEventListener('click', globalClick); cell.addEventListener('click', globalClick); }); attachAudioButtonsToTable(els.globalVocabTableBody);
-    function globalClick(e) { const termo = this.dataset.termo, original = this.dataset.original; if(termo) { const fakeSpan = document.createElement('span'); abrirPainelPalavra(original, termo, fakeSpan); } }
+    document.querySelectorAll('#globalVocabTableBody .global-word-click').forEach(cell=>{ 
+      cell.removeEventListener('click', globalClick); 
+      cell.addEventListener('click', globalClick); 
+    }); 
+    attachAudioButtonsToTable(els.globalVocabTableBody);
+    
+    function globalClick(e) { 
+      const termo = this.dataset.termo, original = this.dataset.original; 
+      if(termo && getCurrentText()) { 
+        const fakeSpan = document.createElement('span'); 
+        abrirPainelPalavra(original, termo, fakeSpan); 
+      } else if (termo && !getCurrentText()) {
+        alert('Selecione um texto primeiro para ver os detalhes da palavra.');
+      }
+    }
   }
 
-  function attachAudioButtonsToTable(tableBody) { tableBody.querySelectorAll('.audio-btn').forEach(btn=>{ btn.removeEventListener('click', audioHandler); btn.addEventListener('click', audioHandler); }); function audioHandler(e) { e.stopPropagation(); const word = this.dataset.word, orig = this.dataset.original; if(word) { const fake = document.createElement('span'); abrirPainelPalavra(orig, word, fake); falarPalavra(); } } }
-  function bindStatusButtons() { document.querySelectorAll('.status-buttons button').forEach(btn=>{ btn.removeEventListener('click', statusHandler); btn.addEventListener('click', statusHandler); }); }
-  function statusHandler(e) { const statusStr = e.currentTarget.dataset.status; if (statusStr === '1-light') mudarStatus(1, 0); else if (statusStr === '1-dark') mudarStatus(1, 1); else mudarStatus(parseInt(statusStr), null); }
-  function setActiveTab(tab) { document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab)); document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active',p.dataset.panel===tab)); if(tab==='global') renderVocabGlobal(); }
+  function attachAudioButtonsToTable(tableBody) { 
+    tableBody.querySelectorAll('.audio-btn').forEach(btn=>{ 
+      btn.removeEventListener('click', audioHandler); 
+      btn.addEventListener('click', audioHandler); 
+    }); 
+    function audioHandler(e) { 
+      e.stopPropagation(); 
+      const word = this.dataset.word, orig = this.dataset.original; 
+      if(word && getCurrentText()) { 
+        const fake = document.createElement('span'); 
+        abrirPainelPalavra(orig, word, fake); 
+        falarPalavra(); 
+      } else if (word && !getCurrentText()) {
+        alert('Selecione um texto primeiro para ouvir a palavra.');
+      }
+    } 
+  }
+  
+  function bindStatusButtons() { 
+    document.querySelectorAll('.status-buttons button').forEach(btn=>{ 
+      btn.removeEventListener('click', statusHandler); 
+      btn.addEventListener('click', statusHandler); 
+    }); 
+  }
+  
+  function statusHandler(e) { 
+    const statusStr = e.currentTarget.dataset.status; 
+    if (statusStr === '1-light') mudarStatus(1, 0); 
+    else if (statusStr === '1-dark') mudarStatus(1, 1); 
+    else mudarStatus(parseInt(statusStr), null); 
+  }
+  
+  function setActiveTab(tab) { 
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab)); 
+    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active',p.dataset.panel===tab)); 
+    if(tab==='global') renderVocabGlobal(); 
+  }
 
   function idiomaNome(code) { const map = {'en-US':'Inglês','ru-RU':'Russo','es-ES':'Espanhol','fr-FR':'Francês','it-IT':'Italiano','de-DE':'Alemão'}; return map[code]||code; }
   function statusLabel(s) { return ['Nova','Inter','Conhecida'][s]||'Nova'; }
@@ -576,26 +697,125 @@
   function salvarOuAtualizarTexto() {
     const titulo = els.tituloTexto.value.trim(), idioma = els.seletorIdioma.value, conteudo = els.inputTexto.value.trim(); if(!titulo || !conteudo) { alert('Preencha título e conteúdo.'); return; }
     const current = getCurrentText();
-    if(current && current._editingSource === 'form') { current.titulo = titulo; current.idioma = idioma; current.conteudo = conteudo; current.atualizadoEm = nowISO(); const { vocab, totalTokens } = buildVocabAndSync(conteudo); current.vocab = vocab; current.stats.totalTokens = totalTokens; computeStats(current); delete current._editingSource; } 
-    else { const id = uid(); const { vocab, totalTokens } = buildVocabAndSync(conteudo); state.textos[id] = { id, titulo, idioma, criadoEm: nowISO(), atualizadoEm: nowISO(), conteudo, vocab, stats: { totalTokens, totalUnicas:0, novas:0, intermediarias:0, conhecidas:0, progresso:0 } }; computeStats(state.textos[id]); state.ui.textoAtualId = id; state.ui.paginaAtual = 0; }
+    if(current && current._editingSource === 'form') { 
+      current.titulo = titulo; current.idioma = idioma; current.conteudo = conteudo; current.atualizadoEm = nowISO(); 
+      const { vocab, totalTokens } = buildVocabAndSync(conteudo); current.vocab = vocab; current.stats.totalTokens = totalTokens; 
+      computeStats(current); delete current._editingSource; 
+    } else { 
+      const id = uid(); const { vocab, totalTokens } = buildVocabAndSync(conteudo); 
+      state.textos[id] = { id, titulo, idioma, criadoEm: nowISO(), atualizadoEm: nowISO(), conteudo, vocab, stats: { totalTokens, totalUnicas:0, novas:0, intermediarias:0, conhecidas:0, progresso:0 }, ultimaPagina: 0 }; 
+      computeStats(state.textos[id]); state.ui.textoAtualId = id; state.ui.paginaAtual = 0; 
+    }
     saveDB(); limparFormulario(); renderAll(); els.detailsNovoTexto.removeAttribute('open');
   }
 
   function limparFormulario() { els.tituloTexto.value = ''; els.inputTexto.value = ''; els.seletorIdioma.value = 'en-US'; }
-  function renderAll() { renderLibrary(); renderCurrentText(); renderReader(); renderVocabTable(); renderVocabGlobal(); renderWordPanel(); bindStatusButtons(); }
-  window.abrirTexto = function(id) { if(state.textos[id]) { state.ui.textoAtualId = id; state.ui.paginaAtual = 0; syncTextWithGlobal(state.textos[id]); saveDB(); renderAll(); els.detailsNovoTexto.removeAttribute('open'); window.scrollTo({top:0}); } };
-  window.preencherFormularioEdicao = function(id) { const t = state.textos[id]; if(t) { state.ui.textoAtualId = id; t._editingSource = 'form'; els.tituloTexto.value = t.titulo; els.seletorIdioma.value = t.idioma; els.inputTexto.value = t.conteudo; renderAll(); els.detailsNovoTexto.setAttribute('open', 'true'); window.scrollTo({top:0}); } };
+  
+  function renderAll() { 
+    renderLibrary(); 
+    renderCurrentText(); 
+    renderReader(); 
+    renderVocabTable(); 
+    renderVocabGlobal(); 
+    renderWordPanel(); 
+    bindStatusButtons(); 
+  }
+  
+  window.abrirTexto = function(id) { 
+    if(state.textos[id]) { 
+      state.ui.textoAtualId = id; 
+      // Carregar página salva
+      const paginaSalva = carregarPosicaoLeitura(id);
+      state.ui.paginaAtual = paginaSalva;
+      syncTextWithGlobal(state.textos[id]); 
+      saveDB(); 
+      renderAll(); 
+      els.detailsNovoTexto.removeAttribute('open'); 
+      window.scrollTo({top:0}); 
+    } 
+  };
+  
+  window.preencherFormularioEdicao = function(id) { 
+    const t = state.textos[id]; 
+    if(t) { 
+      state.ui.textoAtualId = id; 
+      t._editingSource = 'form'; 
+      els.tituloTexto.value = t.titulo; 
+      els.seletorIdioma.value = t.idioma; 
+      els.inputTexto.value = t.conteudo; 
+      renderAll(); 
+      els.detailsNovoTexto.setAttribute('open', 'true'); 
+      window.scrollTo({top:0}); 
+    } 
+  };
+  
   function exportarTudo() { baixarJSON(state, 'lingq_backup.json'); }
   function exportarTextoAtual() { const t = getCurrentText(); if(t) baixarJSON(t, `${slugify(t.titulo)}.json`); else alert('Nenhum texto.'); }
-  function importarJSON(e) { const file = e.target.files[0]; if(!file) return; const reader = new FileReader(); reader.onload = ev => { try { const parsed = JSON.parse(ev.target.result); if(parsed.textos && parsed.vocabularioGlobal) { Object.assign(state.vocabularioGlobal, parsed.vocabularioGlobal); Object.assign(state.textos, parsed.textos); for(let id in state.textos) syncTextWithGlobal(state.textos[id]); if(!state.ui.textoAtualId && Object.keys(state.textos).length) state.ui.textoAtualId = Object.keys(state.textos)[0]; saveDB(); renderAll(); alert('Backup importado.'); } else if(parsed.id && parsed.vocab) { const newId = uid(); state.textos[newId] = {...parsed, id:newId}; syncTextWithGlobal(state.textos[newId]); state.ui.textoAtualId = newId; state.ui.paginaAtual = 0; saveDB(); renderAll(); alert('Texto importado.'); } } catch(e) { alert('JSON inválido.'); } finally { e.target.value = ''; } }; reader.readAsText(file); }
-  function excluirTextoAtual() { const t = getCurrentText(); if(t && confirm(`Excluir "${t.titulo}"?`)) { delete state.textos[t.id]; const ids = Object.keys(state.textos); state.ui.textoAtualId = ids[0] || null; palavraAtual=null; elementoAtual=null; saveDB(); renderAll(); } }
+  function importarJSON(e) { 
+    const file = e.target.files[0]; if(!file) return; 
+    const reader = new FileReader(); 
+    reader.onload = ev => { 
+      try { 
+        const parsed = JSON.parse(ev.target.result); 
+        if(parsed.textos && parsed.vocabularioGlobal) { 
+          Object.assign(state.vocabularioGlobal, parsed.vocabularioGlobal); 
+          Object.assign(state.textos, parsed.textos); 
+          for(let id in state.textos) syncTextWithGlobal(state.textos[id]); 
+          if(!state.ui.textoAtualId && Object.keys(state.textos).length) state.ui.textoAtualId = Object.keys(state.textos)[0]; 
+          saveDB(); renderAll(); alert('Backup importado.'); 
+        } else if(parsed.id && parsed.vocab) { 
+          const newId = uid(); 
+          state.textos[newId] = {...parsed, id:newId, ultimaPagina: 0}; 
+          syncTextWithGlobal(state.textos[newId]); 
+          state.ui.textoAtualId = newId; 
+          state.ui.paginaAtual = 0; 
+          saveDB(); renderAll(); alert('Texto importado.'); 
+        } 
+      } catch(e) { alert('JSON inválido.'); } 
+      finally { e.target.value = ''; } 
+    }; 
+    reader.readAsText(file); 
+  }
+  
+  function excluirTextoAtual() { 
+    const t = getCurrentText(); 
+    if(t && confirm(`Excluir "${t.titulo}"?`)) { 
+      delete state.textos[t.id]; 
+      const ids = Object.keys(state.textos); 
+      state.ui.textoAtualId = ids[0] || null; 
+      palavraAtual=null; elementoAtual=null; 
+      saveDB(); renderAll(); 
+    } 
+  }
+  
   function baixarJSON(data, name) { const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'}); const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
   function slugify(t) { return t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')||'texto'; }
   function escapeHtml(s) { return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'); }
 
-  els.btnSalvarTexto.addEventListener('click', salvarOuAtualizarTexto); els.btnNovoFormulario.addEventListener('click', limparFormulario); els.btnSpeakWord.addEventListener('click', falarPalavra); els.filterStatus.addEventListener('change', renderVocabTable); els.sortVocab.addEventListener('change', renderVocabTable); els.filterGlobalStatus.addEventListener('change', renderVocabGlobal); els.sortGlobal.addEventListener('change', renderVocabGlobal); els.btnExportAll.addEventListener('click', exportarTudo); els.inputImportJson.addEventListener('change', importarJSON); els.btnExportCurrent.addEventListener('click', exportarTextoAtual); els.btnDeleteCurrent.addEventListener('click', excluirTextoAtual); els.btnEditTranslation.addEventListener('click', editarTraducaoManual);
+  els.btnSalvarTexto.addEventListener('click', salvarOuAtualizarTexto); 
+  els.btnNovoFormulario.addEventListener('click', limparFormulario); 
+  els.btnSpeakWord.addEventListener('click', falarPalavra); 
+  els.filterStatus.addEventListener('change', renderVocabTable); 
+  els.sortVocab.addEventListener('change', renderVocabTable); 
+  els.filterGlobalStatus.addEventListener('change', renderVocabGlobal); 
+  els.sortGlobal.addEventListener('change', renderVocabGlobal); 
+  els.btnExportAll.addEventListener('click', exportarTudo); 
+  els.inputImportJson.addEventListener('change', importarJSON); 
+  els.btnExportCurrent.addEventListener('click', exportarTextoAtual); 
+  els.btnDeleteCurrent.addEventListener('click', excluirTextoAtual); 
+  els.btnEditTranslation.addEventListener('click', editarTraducaoManual);
   document.querySelectorAll('.tab-btn').forEach(btn=>btn.addEventListener('click',()=>setActiveTab(btn.dataset.tab)));
-  els.inputEpubFile.addEventListener('change', async (e) => { const file = e.target.files[0]; if(!file) return; try { const ext = await extractTextFromEpub(file); els.inputTexto.value = ext; if(!els.tituloTexto.value.trim()) els.tituloTexto.value = file.name.replace(/\.epub$/i,''); els.detailsNovoTexto.setAttribute('open', 'true'); alert('Extraído!'); } catch(err) { alert('Erro: '+err.message); } e.target.value = ''; });
+  els.inputEpubFile.addEventListener('change', async (e) => { 
+    const file = e.target.files[0]; if(!file) return; 
+    try { 
+      const ext = await extractTextFromEpub(file); 
+      els.inputTexto.value = ext; 
+      if(!els.tituloTexto.value.trim()) els.tituloTexto.value = file.name.replace(/\.epub$/i,''); 
+      els.detailsNovoTexto.setAttribute('open', 'true'); 
+      alert('Extraído!'); 
+    } catch(err) { alert('Erro: '+err.message); } 
+    e.target.value = ''; 
+  });
 
   initDBAndLoad();
 </script>
