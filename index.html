@@ -59,10 +59,32 @@
     .chips { display: flex; flex-wrap: wrap; gap: 8px; }
     .chip { padding: 6px 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); }
     
-    .reader-area { min-height: 340px; line-height: 2.4; font-size: 1.15rem; background: #fff; border: 1px solid var(--border); border-radius: 14px 14px 0 0; padding: 18px; white-space: pre-wrap; border-bottom: none; }
+    .reader-area { 
+      min-height: 340px; 
+      line-height: 2.4; 
+      font-size: 1.15rem; 
+      background: #fff; 
+      border: 1px solid var(--border); 
+      border-radius: 14px 14px 0 0; 
+      padding: 24px 5%; /* Respiro maior nas laterais */
+      white-space: pre-wrap; 
+      border-bottom: none; 
+      
+      /* O segredo da leitura confortável: */
+      max-width: 75ch; 
+      margin: 0 auto; 
+    }
     .pagination-bar { background: var(--surface-2); padding: 12px 18px; border: 1px solid var(--border); border-radius: 0 0 14px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
     
-    .palavra { cursor: pointer; padding: 4px 6px; border-radius: 8px; transition: background .15s; display: inline-block; margin: 0 1px; }
+  .palavra { 
+      cursor: pointer; 
+      padding: 4px 6px; 
+      border-radius: 8px; 
+      /* Adicionamos o box-shadow na lista de transições e suavizamos com "ease" */
+      transition: background 0.2s ease, box-shadow 0.2s ease; 
+      display: inline-block; 
+      margin: 0 1px; 
+    }
     .palavra:hover { background: #dbeafe; }
     .palavra.selected { box-shadow: 0 0 0 2px rgba(37,99,235,0.22); }
     .status-0 { background: var(--new-soft); }
@@ -82,6 +104,18 @@
     .status-buttons button[data-status="1-light"] { background: #ef4444; color: white; }
     .status-buttons button[data-status="1-dark"] { background: #b91c1c; color: white; }
     .status-buttons button[data-status="2"] { background: #16a34a; }
+	
+	#btnSpeakWord {
+      background: var(--primary-dark);
+      font-size: 1.1rem;
+      padding: 14px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+    }
+    #btnSpeakWord:active {
+      transform: scale(0.97); /* Dá um efeito de "clique" real ao apertar */
+    }
     
     .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
     .tab-btn { flex: 1; text-align: center; }
@@ -149,7 +183,7 @@
   </div>
 
   <div class="layout">
-    <aside class="stack">
+<aside class="stack" style="position: sticky; top: 20px; max-height: 95vh; overflow-y: auto;">
       <section class="card">
         <details id="detailsNovoTexto">
           <summary><div class="summary-header"><h2 style="margin:0;">Novo texto</h2><span class="summary-icon">+</span></div></summary>
@@ -302,8 +336,12 @@
       const termo = normalizeWord(token); if (!termo) continue;
       totalTokens++; if (!localVocab[termo]) localVocab[termo] = { termo, ocorrencias: 0 }; localVocab[termo].ocorrencias++;
     }
-    for (const termo in localVocab) {
-      if (!state.vocabularioGlobal[termo]) { state.vocabularioGlobal[termo] = { status: 0, traducoes: [], ultimaInteracao: null }; }
+  for (const termo in localVocab) {
+      if (!state.vocabularioGlobal[termo]) { 
+        // Testa se a palavra contém APENAS números de 0 a 9
+        const ehNumero = /^\d+$/.test(termo);
+        state.vocabularioGlobal[termo] = { status: ehNumero ? 2 : 0, traducoes: [], ultimaInteracao: null }; 
+      }
       const g = state.vocabularioGlobal[termo]; localVocab[termo].status = g.status; localVocab[termo].traducoes = [...g.traducoes]; localVocab[termo].ultimaInteracao = g.ultimaInteracao; if (g.status === 1) localVocab[termo].interLevel = g.interLevel ?? 0;
     }
     return { vocab: localVocab, totalTokens };
@@ -482,26 +520,40 @@
     const inicio = pag * TOKENS_POR_PAGINA;
     const tokensPagina = tokens.slice(inicio, inicio + TOKENS_POR_PAGINA);
     
-    els.readerArea.innerHTML = '';
-    tokensPagina.forEach(token => {
+ els.readerArea.innerHTML = '';
+    const cestaInvisivel = document.createDocumentFragment(); // Cria a "cesta"
+    
+  tokensPagina.forEach(token => {
       if(isWordToken(token)) {
-        const termo = normalizeWord(token); const wordData = texto.vocab[termo] || { status: 0 };
-        const span = document.createElement('span'); span.className = `palavra ${getStatusClass(wordData)}`; span.textContent = token;
-        // Áudio automático ao clicar na palavra!
-        span.addEventListener('click', (e) => {
-          e.stopPropagation();
-          abrirPainelPalavra(token, termo, span);
-          falarPalavra(token, texto.idioma);  // Áudio automático!
-        });
-        span.addEventListener('dblclick', (e) => {
-          e.stopPropagation();
-          abrirPainelPalavra(token, termo, span);
-          mudarStatus(2, null);
-          falarPalavra(token, texto.idioma);  // Áudio também no duplo clique
-        });
-        els.readerArea.appendChild(span);
-      } else els.readerArea.appendChild(document.createTextNode(token));
+        // 1. Descobrimos qual é a palavra "limpa" (sem pontuação)
+        const termo = normalizeWord(token);
+        
+        // 2. Criamos o elemento visual (o span)
+        const span = document.createElement('span');
+        span.textContent = token;
+        span.className = 'palavra'; // Classe base de design e animação
+        
+        // 3. Verificamos se você já conhece a palavra para pintar da cor certa
+        const item = texto.vocab[termo] || state.vocabularioGlobal[termo];
+        if (item) {
+          const classeStatus = getStatusClass(item);
+          if (classeStatus) span.classList.add(classeStatus);
+        } else {
+          span.classList.add('status-0'); // Palavra nova ganha fundo amarelo
+        }
+        
+        // 4. Ensinamos o navegador o que fazer quando clicar nela
+        span.onclick = () => abrirPainelPalavra(token, termo, span);
+        
+        // 5. Agora sim, com a palavra construída, guardamos na cesta!
+        cestaInvisivel.appendChild(span); 
+      } else {
+        // Se for só espaço ou pontuação, entra como texto normal
+        cestaInvisivel.appendChild(document.createTextNode(token));
+      }
     });
+    
+    els.readerArea.appendChild(cestaInvisivel); // Despeja tudo na tela de uma vez só!
 
     if(totalPaginas > 1) {
       els.paginationWrap.classList.remove('hidden'); els.pageInfo.textContent = `Página ${pag + 1} de ${totalPaginas}`;
