@@ -155,8 +155,14 @@
       tr { border: 1px solid var(--border); border-radius: 12px; margin-bottom: 12px; padding: 12px; background: #fff; display: flex; flex-direction: column; gap: 8px; }
       td { border: none; position: relative; padding: 4px 0 4px 40%; text-align: left; }
       td::before { content: attr(data-label); position: absolute; left: 0; width: 35%; padding-right: 10px; white-space: nowrap; font-weight: 600; color: var(--muted); font-size: 0.85rem; }
-      .audio-btn { align-self: flex-start; }
+     .audio-btn { align-self: flex-start; }
       .pagination-bar { flex-direction: column; }
+      
+      /* Faz o botão aparecer apenas no celular */
+      #btnToggleBiblioteca { display: inline-flex !important; }
+      
+      /* Classe que usaremos para sumir com a biblioteca quando minimizada */
+      .biblioteca-oculta { display: none !important; }
     }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -184,7 +190,12 @@
 
   <div class="layout">
 <aside class="stack" style="position: sticky; top: 20px; max-height: 95vh; overflow-y: auto;">
-      <section class="card">
+      <button id="btnToggleBiblioteca" class="secondary" style="display: none; width: 100%; margin-bottom: 10px;">
+        📁 Ocultar Biblioteca
+      </button>
+      
+      <div id="conteudoBiblioteca" class="stack">
+        <section class="card">
         <details id="detailsNovoTexto">
           <summary><div class="summary-header"><h2 style="margin:0;">Novo texto</h2><span class="summary-icon">+</span></div></summary>
           <div><div class="stack">
@@ -923,6 +934,21 @@
   });
 
   initDBAndLoad();
+  
+  const btnToggleBib = document.getElementById('btnToggleBiblioteca');
+  const conteudoBib = document.getElementById('conteudoBiblioteca');
+
+  btnToggleBib.addEventListener('click', () => {
+    // Alterna a classe que esconde o conteúdo
+    conteudoBib.classList.toggle('biblioteca-oculta');
+    
+    // Atualiza o texto do botão conforme o estado
+    if (conteudoBib.classList.contains('biblioteca-oculta')) {
+      btnToggleBib.textContent = '📁 Mostrar Biblioteca';
+    } else {
+      btnToggleBib.textContent = '📁 Ocultar Biblioteca';
+    }
+  });
 </script>
 </body>
 </html>
